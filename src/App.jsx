@@ -2,26 +2,43 @@ import React, { useState } from 'react';
 import GameSelector from './components/GameSelector';
 import VolleyballTracker from './components/volleyball/VolleyballTracker';
 import CricketNRR from './components/cricket/CricketNRR';
+import Statistics from './components/Statistics';
 
 export default function App() {
-  const [selectedGame, setSelectedGame] = useState(null);
+  const [currentView, setCurrentView] = useState({ type: 'home' });
 
-  const handleSelectGame = (gameId) => {
-    setSelectedGame(gameId);
+  const handleSelectGame = (sport, mode) => {
+    setCurrentView({ type: 'game', sport, mode });
+  };
+
+  const handleShowStatistics = () => {
+    setCurrentView({ type: 'statistics' });
   };
 
   const handleBack = () => {
-    setSelectedGame(null);
+    setCurrentView({ type: 'home' });
   };
 
-  // Render selected game or home screen
-  if (selectedGame === 'cricket') {
-    return <CricketNRR onBack={handleBack} />;
+  // Statistics view
+  if (currentView.type === 'statistics') {
+    return <Statistics onBack={handleBack} />;
   }
 
-  if (selectedGame === 'volleyball') {
-    return <VolleyballTracker onBack={handleBack} />;
+  // Game views
+  if (currentView.type === 'game') {
+    if (currentView.sport === 'cricket') {
+      return <CricketNRR onBack={handleBack} mode={currentView.mode} />;
+    }
+    if (currentView.sport === 'volleyball') {
+      return <VolleyballTracker onBack={handleBack} mode={currentView.mode} />;
+    }
   }
 
-  return <GameSelector onSelectGame={handleSelectGame} />;
+  // Home view
+  return (
+    <GameSelector
+      onSelectGame={handleSelectGame}
+      onShowStatistics={handleShowStatistics}
+    />
+  );
 }
