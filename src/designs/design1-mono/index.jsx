@@ -1,5 +1,6 @@
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
+import MonoLanding from './MonoLanding';
 import MonoSportHome from './MonoSportHome';
 import MonoSetup from './MonoSetup';
 import MonoLiveGame from './MonoLiveGame';
@@ -16,8 +17,11 @@ export default function Design1Mono() {
   return (
     <div className="min-h-screen font-swiss" style={{ background: '#fafafa', color: '#111' }}>
       <Routes>
-        {/* Home */}
-        <Route path="" element={<MonoSportHome />} />
+        {/* Landing page */}
+        <Route path="" element={<MonoLanding />} />
+
+        {/* Sport picker (secondary) */}
+        <Route path="play" element={<MonoSportHome />} />
 
         {/* Cricket routes */}
         <Route path="cricket/tournament" element={<MonoTournamentList />} />

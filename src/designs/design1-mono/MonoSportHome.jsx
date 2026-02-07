@@ -30,13 +30,22 @@ export default function MonoSportHome() {
       <div className="max-w-2xl mx-auto">
         {/* Header */}
         <nav className="flex items-center justify-between mb-12">
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight" style={{ color: '#111' }}>
-              GameScore
-            </h1>
-            <p className="text-xs mt-1" style={{ color: '#888' }}>
-              Tournament scorecard
-            </p>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate('/')}
+              className="text-sm bg-transparent border-none cursor-pointer font-swiss"
+              style={{ color: '#888' }}
+            >
+              &larr;
+            </button>
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight" style={{ color: '#111' }}>
+                GameScore
+              </h1>
+              <p className="text-xs mt-1" style={{ color: '#888' }}>
+                All sports
+              </p>
+            </div>
           </div>
           <button
             onClick={() => navigate('/statistics')}
