@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loadCricketTournaments, loadVolleyballTournaments, loadData } from '../../utils/storage';
+import { getSportsByCategory, getSportById } from '../../models/sportRegistry';
 
 const QM_KEY = 'gamescore_quickmatches';
 
@@ -8,6 +9,19 @@ export default function MonoLanding() {
   const navigate = useNavigate();
   const [visible, setVisible] = useState(false);
   const [stats, setStats] = useState({ tournaments: 0, matches: 0, quickMatches: 0 });
+  const [selectedSport, setSelectedSport] = useState(null);
+
+  const SPORT_CATEGORIES = getSportsByCategory();
+
+  // Top 6 featured sports
+  const featuredSports = [
+    getSportById('cricket'),
+    getSportById('volleyball'),
+    getSportById('badminton'),
+    getSportById('football'),
+    getSportById('basketball'),
+    getSportById('tabletennis'),
+  ];
 
   useEffect(() => {
     requestAnimationFrame(() => setVisible(true));
@@ -171,51 +185,74 @@ export default function MonoLanding() {
         </div>
       </section>
 
-      <hr className="mono-divider max-w-3xl mx-auto" />
+      <hr className="mono-divider max-w-6xl mx-auto" />
 
-      {/* ─── Sports ─── */}
-      <section id="sports" className="px-6 py-14">
-        <div className="max-w-3xl mx-auto">
+      {/* ─── Top Sports ─── */}
+      <section id="sports" className="px-4 sm:px-6 py-14">
+        <div className="max-w-6xl mx-auto">
           <h2
             className="text-xs uppercase tracking-widest font-normal mb-10 text-center"
             style={{ color: '#888' }}
           >
-            Choose your game
+            Top Sports
           </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Cricket */}
-            <SportCard
-              icon={'\u{1F3CF}'}
-              name="Cricket"
-              features={['Custom overs (1\u201350)', 'NRR points table', 'Ball-by-ball quick match', 'Wickets, extras, all-out']}
-              onTournament={() => navigate('/cricket/tournament')}
-              onQuick={() => navigate('/cricket/quick')}
-            />
-
-            {/* Volleyball */}
-            <SportCard
-              icon={'\u{1F3D0}'}
-              name="Volleyball"
-              features={['First to 10 / 15 / 21 / 25', 'Win by 2 at deuce', 'Tap-to-score quick match', 'Standings with +/\u2212']}
-              onTournament={() => navigate('/volleyball/tournament')}
-              onQuick={() => navigate('/volleyball/quick')}
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {featuredSports.map(sport => (
+              <SportCard
+                key={sport.id}
+                icon={sport.icon}
+                name={sport.name}
+                features={sport.features}
+                onTournament={() => navigate(`/${sport.id}/tournament`)}
+                onQuick={() => navigate(`/${sport.id}/quick`)}
+              />
+            ))}
           </div>
+        </div>
+      </section>
 
-          {/* More sports teaser */}
-          <div className="mt-6 text-center">
-            <button
-              onClick={() => navigate('/setup')}
-              className="text-xs bg-transparent border-none cursor-pointer font-swiss"
-              style={{ color: '#0066ff' }}
-            >
-              More sports (generic scorer) &rarr;
-            </button>
-            <p className="text-xs mt-1" style={{ color: '#bbb' }}>
-              Badminton, Table Tennis, Football, Basketball
-            </p>
-          </div>
+      <hr className="mono-divider max-w-6xl mx-auto" />
+
+      {/* ─── Browse All Sports ─── */}
+      <section className="px-4 sm:px-6 py-14">
+        <div className="max-w-6xl mx-auto">
+          <h2
+            className="text-xs uppercase tracking-widest font-normal mb-10 text-center"
+            style={{ color: '#888' }}
+          >
+            Browse All 14 Sports
+          </h2>
+
+          {Object.entries(SPORT_CATEGORIES).map(([category, sports]) => (
+            <div key={category} className="mb-8 last:mb-0">
+              <h3 className="text-xs font-medium mb-4" style={{ color: '#666' }}>
+                {category}
+              </h3>
+
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4">
+                {sports.map(sport => (
+                  <button
+                    key={sport.id}
+                    onClick={() => setSelectedSport(sport)}
+                    className="mono-card cursor-pointer hover:border-blue-200 transition-colors"
+                    style={{ padding: '16px', background: 'transparent', border: '1px solid #eee' }}
+                  >
+                    <div className="flex flex-col items-center text-center">
+                      <span className="text-3xl mb-2">{sport.icon}</span>
+                      <p className="text-xs font-medium" style={{ color: '#111' }}>
+                        {sport.name}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          <p className="text-center text-xs mt-8" style={{ color: '#888' }}>
+            Click any sport to see Tournament/Quick Match options
+          </p>
         </div>
       </section>
 
@@ -279,6 +316,74 @@ export default function MonoLanding() {
           </p>
         </div>
       </footer>
+
+      {/* Sport Selection Modal */}
+      {selectedSport && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center p-6 z-50"
+          onClick={() => setSelectedSport(null)}
+        >
+          <div
+            className="bg-white rounded-lg p-6 max-w-md w-full"
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: '#fff' }}
+          >
+            <div className="flex items-center gap-3 mb-6">
+              <span className="text-4xl">{selectedSport.icon}</span>
+              <div>
+                <h2 className="text-xl font-semibold" style={{ color: '#111' }}>
+                  {selectedSport.name}
+                </h2>
+                <p className="text-sm" style={{ color: '#888' }}>
+                  {selectedSport.desc}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 mb-6">
+              <button
+                onClick={() => {
+                  setSelectedSport(null);
+                  navigate(`/${selectedSport.id}/tournament`);
+                }}
+                className="mono-btn-primary w-full"
+                style={{ padding: '14px', fontSize: '0.9375rem' }}
+              >
+                <div className="flex flex-col items-center">
+                  <span>Tournament</span>
+                  <span className="text-xs font-normal opacity-80 mt-1">
+                    2-8 teams, standings, multiple matches
+                  </span>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  setSelectedSport(null);
+                  navigate(`/${selectedSport.id}/quick`);
+                }}
+                className="mono-btn w-full"
+                style={{ padding: '14px', fontSize: '0.9375rem' }}
+              >
+                <div className="flex flex-col items-center">
+                  <span>Quick Match</span>
+                  <span className="text-xs font-normal opacity-60 mt-1">
+                    Single game, instant scoring
+                  </span>
+                </div>
+              </button>
+            </div>
+
+            <button
+              onClick={() => setSelectedSport(null)}
+              className="text-xs mt-4 w-full bg-transparent border-none cursor-pointer"
+              style={{ color: '#888' }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
