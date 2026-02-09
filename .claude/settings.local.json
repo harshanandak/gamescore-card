@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run build:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(npx vercel:*)",
+      "Bash(npx ai-agent-skills:*)",
+      "Bash(dir:*)",
+      "Bash(findstr:*)",
+      "Bash(npm install:*)",
+      "Bash(npx vite build:*)",
+      "Bash(for dir in src/designs/*/:*)",
+      "Bash(bun add:*)",
+      "Bash(bunx convex init --help:*)",
+      "Bash(git status:*)",
+      "mcp__claude_ai_Parallel_Ai_seach__web_search_preview",
+      "Bash(npx convex login:*)",
+      "Bash(npx convex init:*)",
+      "Bash(bunx convex dev:*)"
+    ]
+  }
+}
