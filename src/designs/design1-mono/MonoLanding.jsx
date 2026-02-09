@@ -215,10 +215,10 @@ export default function MonoLanding() {
       <hr className="mono-divider max-w-6xl mx-auto" />
 
       {/* ─── Browse All Sports ─── */}
-      <section className="px-4 sm:px-6 py-14">
-        <div className="max-w-5xl mx-auto">
+      <section className="py-14">
+        <div className="max-w-6xl mx-auto">
           <h2
-            className="text-xs uppercase tracking-widest font-normal mb-10 text-center"
+            className="text-xs uppercase tracking-widest font-normal mb-10 text-center px-4 sm:px-6"
             style={{ color: '#888' }}
           >
             Browse All 14 Sports
@@ -226,17 +226,30 @@ export default function MonoLanding() {
 
           {Object.entries(SPORT_CATEGORIES).map(([category, sports]) => (
             <div key={category} className="mb-8 last:mb-0">
-              <h3 className="text-xs font-medium mb-4 text-center" style={{ color: '#666' }}>
+              <h3 className="text-xs font-medium mb-4 px-4 sm:px-6" style={{ color: '#666' }}>
                 {category}
               </h3>
 
-              <div className="flex flex-wrap justify-center gap-4">
+              <div
+                className="flex gap-3 overflow-x-auto pb-4 px-4 sm:px-6"
+                style={{
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: '#ddd #fafafa',
+                  scrollSnapType: 'x mandatory',
+                }}
+              >
                 {sports.map(sport => (
                   <button
                     key={sport.id}
                     onClick={() => setSelectedSport(sport)}
-                    className="mono-card cursor-pointer hover:border-blue-200 transition-colors"
-                    style={{ padding: '16px', background: 'transparent', border: '1px solid #eee', width: '120px' }}
+                    className="mono-card cursor-pointer hover:border-blue-200 transition-colors flex-shrink-0"
+                    style={{
+                      padding: '16px',
+                      background: 'transparent',
+                      border: '1px solid #eee',
+                      width: '110px',
+                      scrollSnapAlign: 'start',
+                    }}
                   >
                     <div className="flex flex-col items-center text-center">
                       <span className="text-3xl mb-2">{sport.icon}</span>
@@ -250,7 +263,7 @@ export default function MonoLanding() {
             </div>
           ))}
 
-          <p className="text-center text-xs mt-8" style={{ color: '#888' }}>
+          <p className="text-center text-xs mt-8 px-4 sm:px-6" style={{ color: '#888' }}>
             Click any sport to see Tournament/Quick Match options
           </p>
         </div>
