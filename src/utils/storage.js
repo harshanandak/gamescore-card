@@ -97,4 +97,28 @@ export const loadAllStatistics = () => {
   return loadData(STORAGE_KEYS.STATISTICS, {});
 };
 
+// === GENERIC SPORT STORAGE (works with any sport via storageKey) ===
+export const saveSportTournament = (storageKey, tournamentData) => {
+  const tournaments = loadData(storageKey, []);
+  const existingIndex = tournaments.findIndex(t => t.id === tournamentData.id);
+
+  if (existingIndex >= 0) {
+    tournaments[existingIndex] = tournamentData;
+  } else {
+    tournaments.push(tournamentData);
+  }
+
+  return saveData(storageKey, tournaments);
+};
+
+export const loadSportTournaments = (storageKey) => {
+  return loadData(storageKey, []);
+};
+
+export const deleteSportTournament = (storageKey, tournamentId) => {
+  const tournaments = loadData(storageKey, []);
+  const filtered = tournaments.filter(t => t.id !== tournamentId);
+  return saveData(storageKey, filtered);
+};
+
 export { STORAGE_KEYS };

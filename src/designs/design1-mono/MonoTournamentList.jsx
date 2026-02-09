@@ -1,32 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  loadCricketTournaments, deleteCricketTournament,
-  loadVolleyballTournaments, deleteVolleyballTournament,
-} from '../../utils/storage';
+import { loadSportTournaments, deleteSportTournament } from '../../utils/storage';
+import { getSportById } from '../../models/sportRegistry';
 
 export default function MonoTournamentList() {
   const navigate = useNavigate();
   const { sport } = useParams();
-  const isCricket = sport === 'cricket';
+  const sportConfig = getSportById(sport);
   const [tournaments, setTournaments] = useState([]);
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const loaded = isCricket ? loadCricketTournaments() : loadVolleyballTournaments();
+    if (!sportConfig) return;
+    const loaded = loadSportTournaments(sportConfig.storageKey);
     setTournaments(loaded.filter(t => t.mode === 'tournament' || !t.mode));
     requestAnimationFrame(() => setVisible(true));
-  }, [sport]);
+  }, [sport, sportConfig]);
 
   const deleteTournament = (id) => {
     if (!confirm('Delete this tournament?')) return;
-    if (isCricket) deleteCricketTournament(id);
-    else deleteVolleyballTournament(id);
+    deleteSportTournament(sportConfig.storageKey, id);
     setTournaments(prev => prev.filter(t => t.id !== id));
   };
 
-  const sportLabel = isCricket ? 'Cricket' : 'Volleyball';
-  const sportIcon = isCricket ? '\u{1F3CF}' : '\u{1F3D0}';
+  if (!sportConfig) {
+    return (
+      <div className="min-h-screen px-6 py-10 flex items-center justify-center">
+        <p style={{ color: '#888' }}>Sport not found</p>
+      </div>
+    );
+  }
+
+  const sportLabel = sportConfig.name;
+  const sportIcon = sportConfig.icon;
 
   return (
     <div className={`min-h-screen px-6 py-10 mono-transition ${visible ? 'mono-visible' : 'mono-hidden'}`}>

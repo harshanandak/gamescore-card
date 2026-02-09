@@ -1,28 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { loadCricketTournaments, loadVolleyballTournaments } from '../../utils/storage';
-
-const SPORTS = [
-  { id: 'cricket', name: 'Cricket', icon: '\u{1F3CF}', desc: 'NRR, overs, wickets' },
-  { id: 'volleyball', name: 'Volleyball', icon: '\u{1F3D0}', desc: 'Sets, points, deuce' },
-];
+import { loadSportTournaments } from '../../utils/storage';
+import { getSportsList } from '../../models/sportRegistry';
 
 export default function MonoSportHome() {
   const navigate = useNavigate();
   const [visible, setVisible] = useState(false);
-  const [cricketCount, setCricketCount] = useState(0);
-  const [volleyballCount, setVolleyballCount] = useState(0);
+  const [tournamentCounts, setTournamentCounts] = useState({});
+
+  const SPORTS = getSportsList();
 
   useEffect(() => {
     requestAnimationFrame(() => setVisible(true));
-    setCricketCount(loadCricketTournaments().length);
-    setVolleyballCount(loadVolleyballTournaments().length);
+
+    // Load tournament counts for all sports
+    const counts = {};
+    SPORTS.forEach(sport => {
+      const tournaments = loadSportTournaments(sport.storageKey);
+      counts[sport.id] = tournaments.length;
+    });
+    setTournamentCounts(counts);
   }, []);
 
   const getCounts = (id) => {
-    if (id === 'cricket') return cricketCount;
-    if (id === 'volleyball') return volleyballCount;
-    return 0;
+    return tournamentCounts[id] || 0;
   };
 
   return (

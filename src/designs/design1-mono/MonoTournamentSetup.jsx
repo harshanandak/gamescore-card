@@ -1,22 +1,36 @@
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { saveCricketTournament, saveVolleyballTournament } from '../../utils/storage';
+import { saveSportTournament } from '../../utils/storage';
 import { generateRoundRobinMatches } from '../../utils/roundRobin';
+import { getSportById } from '../../models/sportRegistry';
 import { OVERS_PRESETS } from '../../utils/cricketCalculations';
-import { POINTS_PRESETS } from '../../utils/volleyballCalculations';
 
 export default function MonoTournamentSetup() {
   const navigate = useNavigate();
   const { sport } = useParams();
-  const isCricket = sport === 'cricket';
+  const sportConfig = getSportById(sport);
 
   const [step, setStep] = useState(1);
   const [name, setName] = useState('');
   const [teamCount, setTeamCount] = useState(4);
   const [teams, setTeams] = useState([]);
-  const [format, setFormat] = useState(isCricket ? { overs: 5 } : { target: 10 });
+  const [format, setFormat] = useState(null);
   const [customOvers, setCustomOvers] = useState('');
   const [visible, setVisible] = useState(true);
+
+  // Initialize format based on sport
+  React.useEffect(() => {
+    if (!sportConfig || format !== null) return;
+    if (sportConfig.engine === 'custom-cricket') {
+      setFormat({ overs: 5 });
+    } else if (sportConfig.engine === 'sets') {
+      const defaultFormatIndex = sportConfig.config.defaultSetFormat || 0;
+      const defaultFormat = sportConfig.config.setFormats[defaultFormatIndex];
+      setFormat({ sets: defaultFormat.sets, points: sportConfig.config.pointsPerSet });
+    } else if (sportConfig.engine === 'goals') {
+      setFormat({});
+    }
+  }, [sportConfig, format]);
 
   const teamCountOptions = [3, 4, 5, 6, 7, 8];
 
@@ -39,30 +53,49 @@ export default function MonoTournamentSetup() {
   };
 
   const startTournament = () => {
+    if (!sportConfig) return;
     const hasEmptyNames = teams.some(t => !t.name.trim());
     if (hasEmptyNames) return;
 
     const matches = generateRoundRobinMatches(teams);
+
+    // Initialize matches based on engine type
+    let initializedMatches;
+    if (sportConfig.engine === 'sets') {
+      initializedMatches = matches.map(m => ({ ...m, sets: [], status: 'pending' }));
+    } else if (sportConfig.engine === 'goals') {
+      initializedMatches = matches.map(m => ({ ...m, score1: null, score2: null, status: 'pending' }));
+    } else if (sportConfig.engine === 'custom-cricket') {
+      initializedMatches = matches.map(m => ({ ...m, team1Score: null, team2Score: null, format, status: 'pending' }));
+    } else {
+      initializedMatches = matches;
+    }
+
     const tournament = {
       id: Date.now(),
       name: name.trim(),
       teams,
-      matches: isCricket
-        ? matches.map(m => ({ ...m, team1Score: null, team2Score: null, format }))
-        : matches.map(m => ({ ...m, score1: null, score2: null })),
+      matches: initializedMatches,
       format,
       createdAt: new Date().toISOString(),
       mode: 'tournament',
     };
 
-    if (isCricket) {
-      saveCricketTournament(tournament);
-      navigate(`/cricket/tournament/${tournament.id}`);
-    } else {
-      saveVolleyballTournament(tournament);
-      navigate(`/volleyball/tournament/${tournament.id}`);
-    }
+    saveSportTournament(sportConfig.storageKey, tournament);
+    navigate(`/${sport}/tournament/${tournament.id}`);
   };
+
+  if (!sportConfig) {
+    return (
+      <div className="min-h-screen px-6 py-10 flex items-center justify-center">
+        <p style={{ color: '#888' }}>Sport not found</p>
+      </div>
+    );
+  }
+
+  if (!format) {
+    return null; // Wait for format initialization
+  }
 
   return (
     <div className={`min-h-screen px-6 py-10 mono-transition ${visible ? 'mono-visible' : 'mono-hidden'}`}>
@@ -78,7 +111,7 @@ export default function MonoTournamentSetup() {
           </button>
           <span style={{ color: '#ccc' }}>/</span>
           <span className="text-sm" style={{ color: '#111' }}>
-            {isCricket ? 'Cricket' : 'Volleyball'} Tournament
+            {sportConfig.name} Tournament
           </span>
         </div>
 
@@ -105,36 +138,28 @@ export default function MonoTournamentSetup() {
             </div>
 
             {/* Format */}
-            <div className="mb-8">
-              <label className="text-xs uppercase tracking-widest font-normal mb-3 block" style={{ color: '#888' }}>
-                {isCricket ? 'Overs per innings' : 'Points to win'}
-              </label>
+            {sportConfig.engine === 'custom-cricket' && (
+              <div className="mb-8">
+                <label className="text-xs uppercase tracking-widest font-normal mb-3 block" style={{ color: '#888' }}>
+                  Overs per innings
+                </label>
 
-              <div className="flex gap-2 flex-wrap mb-3">
-                {(isCricket ? OVERS_PRESETS : POINTS_PRESETS).map(preset => (
-                  <button
-                    key={preset.value}
-                    onClick={() => {
-                      if (isCricket) {
+                <div className="flex gap-2 flex-wrap mb-3">
+                  {OVERS_PRESETS.map(preset => (
+                    <button
+                      key={preset.value}
+                      onClick={() => {
                         setFormat({ overs: preset.value });
                         setCustomOvers('');
-                      } else {
-                        setFormat({ target: preset.value });
-                      }
-                    }}
-                    className={
-                      (isCricket ? format.overs === preset.value : format.target === preset.value)
-                        ? 'mono-btn-primary'
-                        : 'mono-btn'
-                    }
-                    style={{ padding: '8px 16px', fontSize: '0.8125rem' }}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
+                      }}
+                      className={format.overs === preset.value ? 'mono-btn-primary' : 'mono-btn'}
+                      style={{ padding: '8px 16px', fontSize: '0.8125rem' }}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
 
-              {isCricket && (
                 <div className="flex items-center gap-2">
                   <span className="text-xs" style={{ color: '#888' }}>Custom:</span>
                   <input
@@ -153,8 +178,29 @@ export default function MonoTournamentSetup() {
                   />
                   <span className="text-xs" style={{ color: '#888' }}>overs</span>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+
+            {/* Sets-based format */}
+            {sportConfig.engine === 'sets' && sportConfig.config.setFormats && (
+              <div className="mb-8">
+                <label className="text-xs uppercase tracking-widest font-normal mb-3 block" style={{ color: '#888' }}>
+                  Format
+                </label>
+                <div className="flex gap-2 flex-wrap">
+                  {sportConfig.config.setFormats.map((setFormat, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setFormat({ sets: setFormat.sets, points: sportConfig.config.pointsPerSet })}
+                      className={format.sets === setFormat.sets ? 'mono-btn-primary' : 'mono-btn'}
+                      style={{ padding: '8px 16px', fontSize: '0.8125rem' }}
+                    >
+                      {setFormat.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Team Count */}
             <div className="mb-10">
