@@ -216,7 +216,7 @@ export default function MonoLanding() {
 
       {/* ─── Browse All Sports ─── */}
       <section className="px-4 sm:px-6 py-14">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-5xl mx-auto">
           <h2
             className="text-xs uppercase tracking-widest font-normal mb-10 text-center"
             style={{ color: '#888' }}
@@ -226,17 +226,17 @@ export default function MonoLanding() {
 
           {Object.entries(SPORT_CATEGORIES).map(([category, sports]) => (
             <div key={category} className="mb-8 last:mb-0">
-              <h3 className="text-xs font-medium mb-4" style={{ color: '#666' }}>
+              <h3 className="text-xs font-medium mb-4 text-center" style={{ color: '#666' }}>
                 {category}
               </h3>
 
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4">
+              <div className="flex flex-wrap justify-center gap-4">
                 {sports.map(sport => (
                   <button
                     key={sport.id}
                     onClick={() => setSelectedSport(sport)}
                     className="mono-card cursor-pointer hover:border-blue-200 transition-colors"
-                    style={{ padding: '16px', background: 'transparent', border: '1px solid #eee' }}
+                    style={{ padding: '16px', background: 'transparent', border: '1px solid #eee', width: '120px' }}
                   >
                     <div className="flex flex-col items-center text-center">
                       <span className="text-3xl mb-2">{sport.icon}</span>
