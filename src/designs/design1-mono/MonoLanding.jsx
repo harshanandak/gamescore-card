@@ -230,8 +230,9 @@ export default function MonoLanding() {
                 {category}
               </h3>
 
+              {/* Mobile: Horizontal scroll */}
               <div
-                className="flex gap-3 overflow-x-auto pb-4 px-4 sm:px-6"
+                className="flex gap-3 overflow-x-auto pb-4 px-4 sm:hidden"
                 style={{
                   scrollbarWidth: 'thin',
                   scrollbarColor: '#ddd #fafafa',
@@ -249,6 +250,29 @@ export default function MonoLanding() {
                       border: '1px solid #eee',
                       width: '110px',
                       scrollSnapAlign: 'start',
+                    }}
+                  >
+                    <div className="flex flex-col items-center text-center">
+                      <span className="text-3xl mb-2">{sport.icon}</span>
+                      <p className="text-xs font-medium" style={{ color: '#111' }}>
+                        {sport.name}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {/* Desktop: Grid layout */}
+              <div className="hidden sm:grid sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 px-4 sm:px-6">
+                {sports.map(sport => (
+                  <button
+                    key={sport.id}
+                    onClick={() => setSelectedSport(sport)}
+                    className="mono-card cursor-pointer hover:border-blue-200 transition-colors"
+                    style={{
+                      padding: '16px',
+                      background: 'transparent',
+                      border: '1px solid #eee',
                     }}
                   >
                     <div className="flex flex-col items-center text-center">
