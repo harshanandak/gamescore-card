@@ -49,8 +49,8 @@ export default function MonoSportHome() {
   };
 
   return (
-    <div className={`min-h-screen px-6 py-10 mono-transition ${visible ? 'mono-visible' : 'mono-hidden'}`}>
-      <div className="max-w-2xl mx-auto">
+    <div className={`min-h-screen px-4 sm:px-6 py-6 sm:py-10 mono-transition ${visible ? 'mono-visible' : 'mono-hidden'}`}>
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
         <nav className="flex items-center justify-between mb-12">
           <div className="flex items-center gap-4">
@@ -122,7 +122,7 @@ export default function MonoSportHome() {
 
               {/* Tab Content */}
               <div className="animate-fade-in">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {SPORT_CATEGORIES[activeTab].map(sport => (
                     <div key={sport.id} className="mono-card" style={{ padding: 0 }}>
                       <div style={{ padding: '20px 24px' }}>
@@ -185,7 +185,7 @@ export default function MonoSportHome() {
                     {category}
                   </h3>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                     {sports.map(sport => (
                       <div
                         key={sport.id}
