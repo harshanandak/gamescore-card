@@ -91,9 +91,7 @@ export default function MonoLanding() {
 
           <div className="flex items-center justify-center gap-3 flex-wrap">
             <button
-              onClick={() => {
-                document.getElementById('sports')?.scrollIntoView({ behavior: 'smooth' });
-              }}
+              onClick={() => navigate('/play')}
               className="mono-btn-primary"
               style={{ padding: '12px 32px', fontSize: '0.9375rem' }}
             >
@@ -157,17 +155,17 @@ export default function MonoLanding() {
             <StepCard
               number="1"
               title="Pick a sport"
-              desc="Choose Cricket or Volleyball. Select tournament mode or start a quick match."
+              desc="Choose from 14 sports. Select tournament mode or start a quick match."
             />
             <StepCard
               number="2"
               title="Set up teams"
-              desc="Name your tournament, choose the format, and add 3 to 8 teams."
+              desc="Name your tournament, choose the format, and add 2 to 8 teams with optional player rosters."
             />
             <StepCard
               number="3"
               title="Enter scores"
-              desc="Tap any match to enter scores. Points table and NRR update instantly."
+              desc="Tap any match to enter scores. Points table and standings update instantly."
             />
           </div>
         </div>
@@ -261,9 +259,7 @@ export default function MonoLanding() {
             No account needed. Your data saves locally on this device.
           </p>
           <button
-            onClick={() => {
-              document.getElementById('sports')?.scrollIntoView({ behavior: 'smooth' });
-            }}
+            onClick={() => navigate('/play')}
             className="mono-btn-primary"
             style={{ padding: '12px 40px', fontSize: '0.9375rem' }}
           >
