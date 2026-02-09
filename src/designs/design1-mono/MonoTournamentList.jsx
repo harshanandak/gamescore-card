@@ -87,14 +87,23 @@ export default function MonoTournamentList() {
                   >
                     <div className="flex items-center justify-between mb-1">
                       <h3 className="text-sm font-medium" style={{ color: '#111' }}>{t.name}</h3>
-                      <span className="mono-badge mono-badge-live">
-                        {completedCount}/{matchCount}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="mono-badge mono-badge-live">
+                          {completedCount}/{matchCount}
+                        </span>
+                        {t.teams?.length === 2 && (
+                          <span className="text-xs px-2 py-1 rounded" style={{ background: '#f0f9ff', color: '#0066ff' }}>
+                            Head-to-head
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <p className="text-xs" style={{ color: '#888' }}>
-                      {t.teams?.length || 0} teams &middot; {matchCount} matches
+                      {t.teams?.length || 0} teams &middot; {matchCount} match{matchCount > 1 ? 'es' : ''}
+                      {t.teams?.length === 2 && ' \u00b7 Single elimination'}
+                      {t.teams?.length >= 3 && ' \u00b7 Round-robin'}
                       {t.format?.overs ? ` \u00b7 ${t.format.overs} overs` : ''}
-                      {t.format?.target ? ` \u00b7 First to ${t.format.target}` : ''}
+                      {t.format?.sets ? ` \u00b7 Best of ${t.format.sets}` : ''}
                     </p>
                   </div>
                   <div style={{ borderTop: '1px solid #eee', padding: '8px 20px' }}>

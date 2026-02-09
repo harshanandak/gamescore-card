@@ -18,6 +18,8 @@ export default function MonoTournamentSetup() {
   const [customOvers, setCustomOvers] = useState('');
   const [visible, setVisible] = useState(true);
 
+  const isCricket = sportConfig?.engine === 'custom-cricket';
+
   // Initialize format based on sport
   React.useEffect(() => {
     if (!sportConfig || format !== null) return;
@@ -32,7 +34,7 @@ export default function MonoTournamentSetup() {
     }
   }, [sportConfig, format]);
 
-  const teamCountOptions = [3, 4, 5, 6, 7, 8];
+  const teamCountOptions = [2, 3, 4, 5, 6, 7, 8];
 
   const initTeams = (count) => {
     setTeams(Array.from({ length: count }, (_, i) => ({
@@ -52,12 +54,47 @@ export default function MonoTournamentSetup() {
     setTeams(prev => prev.map((t, i) => i === index ? { ...t, name: newName } : t));
   };
 
+  const addMember = (teamIdx) => {
+    setTeams(prev => prev.map((t, i) =>
+      i === teamIdx ? { ...t, members: [...t.members, ''] } : t
+    ));
+  };
+
+  const updateMember = (teamIdx, memberIdx, value) => {
+    setTeams(prev => prev.map((t, i) =>
+      i === teamIdx
+        ? { ...t, members: t.members.map((m, mi) => mi === memberIdx ? value : m) }
+        : t
+    ));
+  };
+
+  const removeMember = (teamIdx, memberIdx) => {
+    setTeams(prev => prev.map((t, i) =>
+      i === teamIdx
+        ? { ...t, members: t.members.filter((_, mi) => mi !== memberIdx) }
+        : t
+    ));
+  };
+
   const startTournament = () => {
     if (!sportConfig) return;
     const hasEmptyNames = teams.some(t => !t.name.trim());
     if (hasEmptyNames) return;
 
-    const matches = generateRoundRobinMatches(teams);
+    // Generate matches based on team count
+    let matches;
+    if (teamCount === 2) {
+      // Single match for 2-team tournament
+      matches = [{
+        id: `${Date.now()}-0`,
+        team1Id: teams[0].id,
+        team2Id: teams[1].id,
+        status: 'pending',
+      }];
+    } else {
+      // Round-robin for 3+ teams
+      matches = generateRoundRobinMatches(teams);
+    }
 
     // Initialize matches based on engine type
     let initializedMatches;
@@ -220,7 +257,9 @@ export default function MonoTournamentSetup() {
                 ))}
               </div>
               <p className="text-xs mt-2" style={{ color: '#888' }}>
-                {(teamCount * (teamCount - 1)) / 2} matches (round-robin)
+                Will generate {teamCount === 2 ? '1 match' : `${(teamCount * (teamCount - 1)) / 2} matches`}
+                {teamCount === 2 && ' (single elimination)'}
+                {teamCount >= 3 && ' (round-robin format)'}
               </p>
             </div>
 
@@ -272,6 +311,69 @@ export default function MonoTournamentSetup() {
               </div>
             </div>
 
+            <button
+              onClick={() => setStep(3)}
+              className="mono-btn-primary w-full"
+              style={{ padding: '12px', fontSize: '0.9375rem' }}
+            >
+              Next: Add Players (Optional)
+            </button>
+          </div>
+        )}
+
+        {/* Step 3: Player Roster (Optional) + Summary */}
+        {step === 3 && (
+          <div className="animate-fade-in">
+            {/* Player Roster Section */}
+            <div className="mb-8">
+              <div className="flex items-center justify-between mb-4">
+                <label className="text-xs uppercase tracking-widest font-normal" style={{ color: '#888' }}>
+                  Add Players (Optional)
+                </label>
+                <button
+                  onClick={() => setStep(2)}
+                  className="text-xs bg-transparent border-none cursor-pointer font-swiss"
+                  style={{ color: '#0066ff' }}
+                >
+                  Back
+                </button>
+              </div>
+
+              {teams.map((team, idx) => (
+                <div key={team.id} className="mono-card p-4 mb-3">
+                  <h4 className="text-sm font-medium mb-3" style={{ color: '#111' }}>{team.name}</h4>
+
+                  {team.members.map((member, mIdx) => (
+                    <div key={mIdx} className="flex gap-2 mb-2">
+                      <input
+                        type="text"
+                        value={member}
+                        onChange={(e) => updateMember(idx, mIdx, e.target.value)}
+                        className="mono-input flex-1"
+                        placeholder={`Player ${mIdx + 1}`}
+                      />
+                      <button
+                        onClick={() => removeMember(idx, mIdx)}
+                        className="text-xs bg-transparent border-none cursor-pointer"
+                        style={{ color: '#dc2626' }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+
+                  <button
+                    onClick={() => addMember(idx)}
+                    className="mono-btn w-full mt-2"
+                  >
+                    + Add Player
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <hr className="mono-divider mb-8" />
+
             {/* Summary */}
             <div className="mono-card mb-8" style={{ padding: '16px 20px' }}>
               <h3 className="text-xs uppercase tracking-widest font-normal mb-3" style={{ color: '#888' }}>
@@ -285,7 +387,9 @@ export default function MonoTournamentSetup() {
                 <div className="flex justify-between text-sm">
                   <span style={{ color: '#888' }}>Format</span>
                   <span className="font-mono" style={{ color: '#111' }}>
-                    {isCricket ? `${format.overs} overs` : `First to ${format.target}`}
+                    {isCricket && `${format.overs} overs`}
+                    {sportConfig.engine === 'sets' && `Best of ${format.sets}`}
+                    {sportConfig.engine === 'goals' && 'Standard'}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
@@ -295,7 +399,7 @@ export default function MonoTournamentSetup() {
                 <div className="flex justify-between text-sm">
                   <span style={{ color: '#888' }}>Matches</span>
                   <span className="font-mono" style={{ color: '#111' }}>
-                    {(teamCount * (teamCount - 1)) / 2}
+                    {teamCount === 2 ? 1 : (teamCount * (teamCount - 1)) / 2}
                   </span>
                 </div>
               </div>

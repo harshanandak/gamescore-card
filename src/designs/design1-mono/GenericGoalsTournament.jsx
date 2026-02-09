@@ -265,13 +265,33 @@ export default function GenericGoalsTournament() {
           <div className="space-y-3">
             {tournament.teams.map((team, idx) => (
               <div key={team.id} className="mono-card p-4">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold"
                        style={{ background: '#f5f5f5' }}>
                     {idx + 1}
                   </div>
                   <div className="font-medium">{team.name}</div>
                 </div>
+
+                {/* Show roster if exists */}
+                {team.members && team.members.length > 0 && (
+                  <div className="mt-3 pt-3 border-t" style={{ borderColor: '#eee' }}>
+                    <div className="text-xs uppercase tracking-widest mb-2" style={{ color: '#888' }}>
+                      Roster
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {team.members.filter(m => m.trim()).map((member, mIdx) => (
+                        <span
+                          key={mIdx}
+                          className="text-xs px-2 py-1 rounded"
+                          style={{ background: '#f5f5f5', color: '#666' }}
+                        >
+                          {member}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

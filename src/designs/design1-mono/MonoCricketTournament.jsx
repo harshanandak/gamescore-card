@@ -360,15 +360,10 @@ export default function MonoCricketTournament() {
             {tournament.teams.map((team, i) => {
               const row = pointsTable.find(r => r.teamId === team.id);
               return (
-                <div key={team.id} className="mono-card" style={{ padding: '16px 20px' }}>
-                  <div className="flex items-center justify-between">
+                <div key={team.id} className="mono-card p-4">
+                  <div className="flex items-center justify-between mb-3">
                     <div>
                       <h3 className="text-sm font-medium" style={{ color: '#111' }}>{team.name}</h3>
-                      {team.members?.length > 0 && (
-                        <p className="text-xs mt-1" style={{ color: '#888' }}>
-                          {team.members.join(', ')}
-                        </p>
-                      )}
                     </div>
                     {row && (
                       <div className="text-right">
@@ -381,6 +376,26 @@ export default function MonoCricketTournament() {
                       </div>
                     )}
                   </div>
+
+                  {/* Show roster if exists */}
+                  {team.members && team.members.length > 0 && (
+                    <div className="mt-3 pt-3 border-t" style={{ borderColor: '#eee' }}>
+                      <div className="text-xs uppercase tracking-widest mb-2" style={{ color: '#888' }}>
+                        Roster
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {team.members.filter(m => m.trim()).map((member, mIdx) => (
+                          <span
+                            key={mIdx}
+                            className="text-xs px-2 py-1 rounded"
+                            style={{ background: '#f5f5f5', color: '#666' }}
+                          >
+                            {member}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
