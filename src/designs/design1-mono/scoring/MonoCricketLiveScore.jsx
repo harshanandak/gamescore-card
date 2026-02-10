@@ -173,6 +173,41 @@ export default function MonoCricketLiveScore() {
     setHistory(prev => prev.slice(0, -1));
   };
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    if (!tournament) return;
+
+    const handleKeyPress = (e) => {
+      // Ignore if user is typing in an input
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      // Ignore if match is complete
+      if (isMatchComplete) return;
+
+      const key = e.key.toLowerCase();
+
+      // Run buttons (0-6)
+      if (['0', '1', '2', '3', '4', '6'].includes(key)) {
+        addRuns(parseInt(key));
+      }
+      // Wicket
+      else if (key === 'w') {
+        addWicket();
+      }
+      // Extra (wide/no-ball)
+      else if (key === 'e') {
+        addExtra('wide');
+      }
+      // Undo
+      else if (key === 'u') {
+        undo();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [scores, battingTeam, innings, history, tournament, isMatchComplete]); // Dependencies
+
   // Save match
   const saveMatch = () => {
     if (!tournament || !match) return;
@@ -275,6 +310,9 @@ export default function MonoCricketLiveScore() {
               Target: {target + 1} · Need {Math.max(0, target + 1 - currentScore.runs)} from {totalBalls - currentScore.balls} balls
             </p>
           )}
+          <p className="text-xs mt-3" style={{ color: '#ccc' }}>
+            Keyboard: 0-6 = Runs &middot; W = Wicket &middot; E = Extra &middot; U = Undo
+          </p>
         </div>
 
         {/* Other team score */}

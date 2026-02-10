@@ -157,6 +157,31 @@ export default function MonoSetsLiveScore() {
     navigate(`/${sport}/tournament/${id}`);
   };
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      // Ignore if user is typing in an input
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      switch (e.key.toLowerCase()) {
+        case 'q':
+          addPoint(1);
+          break;
+        case 'p':
+          addPoint(2);
+          break;
+        case 'u':
+          undo();
+          break;
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [currentSet, sets, history, sportConfig, tournament]); // Dependencies for addPoint/undo
+
   // Cancel and return
   const handleCancel = () => {
     if (hasChanges && !window.confirm('Discard unsaved changes?')) return;
@@ -244,8 +269,11 @@ export default function MonoSetsLiveScore() {
         </div>
 
         {/* Rules info */}
-        <p className="text-xs text-center mb-6" style={{ color: '#bbb' }}>
+        <p className="text-xs text-center mb-2" style={{ color: '#bbb' }}>
           {targetPoints} points to win &middot; Win by {winBy}
+        </p>
+        <p className="text-xs text-center mb-6" style={{ color: '#ccc' }}>
+          Keyboard: Q = {team1Name} &middot; P = {team2Name} &middot; U = Undo
         </p>
 
         {/* Set history */}

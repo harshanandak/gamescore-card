@@ -72,6 +72,31 @@ export default function MonoGoalsLiveScore() {
     setHistory(prev => prev.slice(0, -1));
   };
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      // Ignore if user is typing in an input
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      switch (e.key.toLowerCase()) {
+        case 'q':
+          addScore(1, 1);
+          break;
+        case 'p':
+          addScore(2, 1);
+          break;
+        case 'u':
+          undo();
+          break;
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [score1, score2, history, sportConfig, tournament]); // Dependencies for addScore/undo
+
   // Save match and return
   const saveMatch = () => {
     // Check for draw if not allowed
@@ -211,8 +236,11 @@ export default function MonoGoalsLiveScore() {
         </div>
 
         {/* Info */}
-        <p className="text-xs text-center mb-6" style={{ color: '#bbb' }}>
+        <p className="text-xs text-center mb-2" style={{ color: '#bbb' }}>
           {sportConfig.config.drawAllowed ? 'Draws allowed' : 'No draws'} · Tap buttons to score
+        </p>
+        <p className="text-xs text-center mb-6" style={{ color: '#ccc' }}>
+          Keyboard: Q = {team1Name} &middot; P = {team2Name} &middot; U = Undo
         </p>
 
         {/* Bottom bar */}
