@@ -9,11 +9,6 @@ export default function MonoCricketTournament() {
   const [tournament, setTournament] = useState(null);
   const [tab, setTab] = useState('matches');
   const [visible, setVisible] = useState(false);
-  const [scoringMatch, setScoringMatch] = useState(null);
-  const [scoreForm, setScoreForm] = useState({
-    team1Runs: '', team1Balls: '', team1AllOut: false,
-    team2Runs: '', team2Balls: '', team2AllOut: false,
-  });
 
   useEffect(() => {
     const tournaments = loadCricketTournaments();
@@ -39,57 +34,15 @@ export default function MonoCricketTournament() {
     return team?.name || 'Unknown';
   };
 
-  const totalBalls = tournament.format?.overs ? tournament.format.overs * 6 : 12;
   const completedMatches = tournament.matches.filter(m => m.status === 'completed').length;
   const totalMatches = tournament.matches.length;
   const pointsTable = calculateCricketPointsTable(tournament.teams, tournament.matches);
 
-  const openScoring = (match, index) => {
-    setScoringMatch(index);
-    if (match.team1Score) {
-      setScoreForm({
-        team1Runs: match.team1Score.runs.toString(),
-        team1Balls: match.team1Score.balls.toString(),
-        team1AllOut: match.team1Score.allOut || false,
-        team2Runs: match.team2Score.runs.toString(),
-        team2Balls: match.team2Score.balls.toString(),
-        team2AllOut: match.team2Score.allOut || false,
-      });
-    } else {
-      setScoreForm({
-        team1Runs: '', team1Balls: totalBalls.toString(), team1AllOut: false,
-        team2Runs: '', team2Balls: totalBalls.toString(), team2AllOut: false,
-      });
-    }
-  };
-
-  const saveScore = () => {
-    const t1r = parseInt(scoreForm.team1Runs);
-    const t1b = parseInt(scoreForm.team1Balls);
-    const t2r = parseInt(scoreForm.team2Runs);
-    const t2b = parseInt(scoreForm.team2Balls);
-    if (isNaN(t1r) || isNaN(t2r) || isNaN(t1b) || isNaN(t2b)) return;
-
+  const clearScore = (matchId) => {
     setTournament(prev => ({
       ...prev,
-      matches: prev.matches.map((m, i) => {
-        if (i !== scoringMatch) return m;
-        return {
-          ...m,
-          team1Score: { runs: t1r, balls: t1b, allOut: scoreForm.team1AllOut },
-          team2Score: { runs: t2r, balls: t2b, allOut: scoreForm.team2AllOut },
-          status: 'completed',
-        };
-      }),
-    }));
-    setScoringMatch(null);
-  };
-
-  const clearScore = (index) => {
-    setTournament(prev => ({
-      ...prev,
-      matches: prev.matches.map((m, i) => {
-        if (i !== index) return m;
+      matches: prev.matches.map((m) => {
+        if (m.id !== matchId) return m;
         return { ...m, team1Score: null, team2Score: null, status: 'pending' };
       }),
     }));
@@ -165,7 +118,10 @@ export default function MonoCricketTournament() {
                     </span>
                     {isComplete && (
                       <button
-                        onClick={() => clearScore(idx)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          clearScore(match.id);
+                        }}
                         className="text-xs bg-transparent border-none cursor-pointer font-swiss"
                         style={{ color: '#dc2626' }}
                       >
@@ -174,132 +130,46 @@ export default function MonoCricketTournament() {
                     )}
                   </div>
 
-                  {/* Scoring overlay */}
-                  {scoringMatch === idx ? (
-                    <div style={{ padding: '16px 20px' }}>
-                      {/* Team 1 */}
-                      <div className="mb-4">
-                        <p className="text-sm font-medium mb-2" style={{ color: '#111' }}>{t1Name}</p>
-                        <div className="flex items-center gap-3">
-                          <div className="flex-1">
-                            <label className="text-xs block mb-1" style={{ color: '#888' }}>Runs</label>
-                            <input
-                              type="number"
-                              min="0"
-                              className="mono-input"
-                              value={scoreForm.team1Runs}
-                              onChange={e => setScoreForm(p => ({ ...p, team1Runs: e.target.value }))}
-                              autoFocus
-                            />
-                          </div>
-                          <div style={{ width: '80px' }}>
-                            <label className="text-xs block mb-1" style={{ color: '#888' }}>Balls</label>
-                            <input
-                              type="number"
-                              min="1"
-                              max={totalBalls}
-                              className="mono-input"
-                              value={scoreForm.team1Balls}
-                              onChange={e => setScoreForm(p => ({ ...p, team1Balls: e.target.value }))}
-                            />
-                          </div>
-                          <label className="flex items-center gap-1 text-xs mt-4" style={{ color: '#888' }}>
-                            <input
-                              type="checkbox"
-                              checked={scoreForm.team1AllOut}
-                              onChange={e => setScoreForm(p => ({ ...p, team1AllOut: e.target.checked }))}
-                            />
-                            All out
-                          </label>
+                  {/* Match card - clickable */}
+                  <div
+                    onClick={() => navigate(`/cricket/tournament/${id}/match/${match.id}/score`)}
+                    className="cursor-pointer"
+                    style={{ padding: '16px 20px' }}
+                  >
+                    {isComplete ? (
+                      <div className="flex items-center">
+                        <div className="flex-1 text-right">
+                          <p className="text-sm font-medium" style={{ color: t1Wins ? '#111' : '#888' }}>
+                            {t1Name}
+                          </p>
+                          <p className="text-lg font-bold font-mono mono-score" style={{ color: t1Wins ? '#111' : '#888' }}>
+                            {match.team1Score.runs}/{match.team1Score.allOut ? 'all' : match.team1Score.wickets || 0}
+                          </p>
+                          <p className="text-xs font-mono" style={{ color: '#bbb' }}>
+                            {ballsToOvers(match.team1Score.balls)} ov
+                          </p>
+                        </div>
+                        <div className="mx-4 text-xs" style={{ color: '#ccc' }}>vs</div>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium" style={{ color: t2Wins ? '#111' : '#888' }}>
+                            {t2Name}
+                          </p>
+                          <p className="text-lg font-bold font-mono mono-score" style={{ color: t2Wins ? '#111' : '#888' }}>
+                            {match.team2Score.runs}/{match.team2Score.allOut ? 'all' : match.team2Score.wickets || 0}
+                          </p>
+                          <p className="text-xs font-mono" style={{ color: '#bbb' }}>
+                            {ballsToOvers(match.team2Score.balls)} ov
+                          </p>
                         </div>
                       </div>
-
-                      {/* Team 2 */}
-                      <div className="mb-4">
-                        <p className="text-sm font-medium mb-2" style={{ color: '#111' }}>{t2Name}</p>
-                        <div className="flex items-center gap-3">
-                          <div className="flex-1">
-                            <label className="text-xs block mb-1" style={{ color: '#888' }}>Runs</label>
-                            <input
-                              type="number"
-                              min="0"
-                              className="mono-input"
-                              value={scoreForm.team2Runs}
-                              onChange={e => setScoreForm(p => ({ ...p, team2Runs: e.target.value }))}
-                            />
-                          </div>
-                          <div style={{ width: '80px' }}>
-                            <label className="text-xs block mb-1" style={{ color: '#888' }}>Balls</label>
-                            <input
-                              type="number"
-                              min="1"
-                              max={totalBalls}
-                              className="mono-input"
-                              value={scoreForm.team2Balls}
-                              onChange={e => setScoreForm(p => ({ ...p, team2Balls: e.target.value }))}
-                            />
-                          </div>
-                          <label className="flex items-center gap-1 text-xs mt-4" style={{ color: '#888' }}>
-                            <input
-                              type="checkbox"
-                              checked={scoreForm.team2AllOut}
-                              onChange={e => setScoreForm(p => ({ ...p, team2AllOut: e.target.checked }))}
-                            />
-                            All out
-                          </label>
-                        </div>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm" style={{ color: '#111' }}>{t1Name}</span>
+                        <span className="text-xs" style={{ color: '#ccc' }}>vs</span>
+                        <span className="text-sm" style={{ color: '#111' }}>{t2Name}</span>
                       </div>
-
-                      <div className="flex gap-2">
-                        <button onClick={saveScore} className="mono-btn-primary flex-1" style={{ padding: '10px' }}>
-                          Save
-                        </button>
-                        <button onClick={() => setScoringMatch(null)} className="mono-btn flex-1" style={{ padding: '10px' }}>
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div
-                      onClick={() => openScoring(match, idx)}
-                      className="cursor-pointer"
-                      style={{ padding: '16px 20px' }}
-                    >
-                      {isComplete ? (
-                        <div className="flex items-center">
-                          <div className="flex-1 text-right">
-                            <p className="text-sm font-medium" style={{ color: t1Wins ? '#111' : '#888' }}>
-                              {t1Name}
-                            </p>
-                            <p className="text-lg font-bold font-mono mono-score" style={{ color: t1Wins ? '#111' : '#888' }}>
-                              {match.team1Score.runs}/{match.team1Score.allOut ? 'all' : ''}
-                            </p>
-                            <p className="text-xs font-mono" style={{ color: '#bbb' }}>
-                              {ballsToOvers(match.team1Score.balls)} ov
-                            </p>
-                          </div>
-                          <div className="mx-4 text-xs" style={{ color: '#ccc' }}>vs</div>
-                          <div className="flex-1">
-                            <p className="text-sm font-medium" style={{ color: t2Wins ? '#111' : '#888' }}>
-                              {t2Name}
-                            </p>
-                            <p className="text-lg font-bold font-mono mono-score" style={{ color: t2Wins ? '#111' : '#888' }}>
-                              {match.team2Score.runs}/{match.team2Score.allOut ? 'all' : ''}
-                            </p>
-                            <p className="text-xs font-mono" style={{ color: '#bbb' }}>
-                              {ballsToOvers(match.team2Score.balls)} ov
-                            </p>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm" style={{ color: '#111' }}>{t1Name}</span>
-                          <span className="text-xs" style={{ color: '#ccc' }}>vs</span>
-                          <span className="text-sm" style={{ color: '#111' }}>{t2Name}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               );
             })}

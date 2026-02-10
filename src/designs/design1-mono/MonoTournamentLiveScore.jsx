@@ -3,9 +3,16 @@ import { useParams } from 'react-router-dom';
 import { getSportById } from '../../models/sportRegistry';
 import MonoSetsLiveScore from './scoring/MonoSetsLiveScore';
 import MonoGoalsLiveScore from './scoring/MonoGoalsLiveScore';
+import MonoCricketLiveScore from './scoring/MonoCricketLiveScore';
 
 export default function MonoTournamentLiveScore() {
   const { sport } = useParams();
+
+  // Cricket uses custom-cricket engine and special handling
+  if (sport === 'cricket') {
+    return <MonoCricketLiveScore />;
+  }
+
   const sportConfig = getSportById(sport);
 
   if (!sportConfig) {
@@ -26,10 +33,10 @@ export default function MonoTournamentLiveScore() {
     return <MonoGoalsLiveScore />;
   }
 
-  // Cricket will be added in Phase 4
+  // Fallback
   return (
     <div className="min-h-screen px-6 py-10 flex items-center justify-center">
-      <p style={{ color: '#888' }}>Live scoring for {sportConfig.name} coming soon...</p>
+      <p style={{ color: '#888' }}>Live scoring for {sportConfig?.name || sport} coming soon...</p>
     </div>
   );
 }
