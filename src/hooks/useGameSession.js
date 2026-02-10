@@ -1,22 +1,29 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { createGameSession, createHistoryRecord } from '../models/types';
 import { saveSession, deleteSession, loadSessions, saveHistory } from '../utils/universalStorage';
 
 export function useGameSession(sessionId = null) {
   const [session, setSession] = useState(null);
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   // Load existing session if ID provided
   useEffect(() => {
     if (sessionId) {
       const sessions = loadSessions();
       const found = sessions.find(s => s.id === sessionId);
-      if (found) setSession(found);
+      if (found && isMounted.current) setSession(found);
     }
   }, [sessionId]);
 
   // Auto-save on changes
   useEffect(() => {
-    if (session) {
+    if (session && isMounted.current) {
       saveSession(session);
     }
   }, [session]);

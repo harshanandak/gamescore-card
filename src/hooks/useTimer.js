@@ -4,6 +4,14 @@ export function useTimer() {
   const [elapsed, setElapsed] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const intervalRef = useRef(null);
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+      clearInterval(intervalRef.current);
+    };
+  }, []);
 
   const start = useCallback(() => {
     setIsRunning(true);
@@ -25,12 +33,18 @@ export function useTimer() {
   useEffect(() => {
     if (isRunning) {
       intervalRef.current = setInterval(() => {
-        setElapsed(prev => prev + 1);
+        if (isMounted.current) {
+          setElapsed(prev => prev + 1);
+        }
       }, 1000);
     } else {
       clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
-    return () => clearInterval(intervalRef.current);
+    return () => {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    };
   }, [isRunning]);
 
   const formatTime = useCallback((seconds) => {

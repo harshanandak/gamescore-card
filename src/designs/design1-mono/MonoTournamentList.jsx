@@ -38,19 +38,20 @@ export default function MonoTournamentList() {
     <div className={`min-h-screen px-6 py-10 mono-transition ${visible ? 'mono-visible' : 'mono-hidden'}`}>
       <div className="max-w-2xl mx-auto">
         {/* Header */}
-        <div className="flex items-center gap-2 mb-2">
+        <nav className="flex items-center gap-2 mb-2" aria-label="Breadcrumb">
           <button
             onClick={() => navigate('/')}
             className="text-sm bg-transparent border-none cursor-pointer font-swiss"
             style={{ color: '#888' }}
+            aria-label="Go back to home"
           >
-            \u2190 Home
+            &larr; Home
           </button>
-        </div>
+        </nav>
 
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-xl font-semibold tracking-tight" style={{ color: '#111' }}>
-            {sportIcon} {sportLabel} Tournaments
+            <span aria-hidden="true">{sportIcon} </span>{sportLabel} Tournaments
           </h1>
         </div>
 
@@ -80,15 +81,16 @@ export default function MonoTournamentList() {
 
               return (
                 <div key={t.id} className="mono-card" style={{ padding: 0 }}>
-                  <div
-                    className="cursor-pointer"
-                    style={{ padding: '16px 20px' }}
+                  <button
+                    className="cursor-pointer w-full text-left bg-transparent border-none"
+                    style={{ padding: '16px 20px', display: 'block' }}
                     onClick={() => navigate(`/${sport}/tournament/${t.id}`)}
+                    aria-label={`Open ${t.name} tournament, ${completedCount} of ${matchCount} matches completed`}
                   >
                     <div className="flex items-center justify-between mb-1">
                       <h3 className="text-sm font-medium" style={{ color: '#111' }}>{t.name}</h3>
                       <div className="flex items-center gap-2">
-                        <span className="mono-badge mono-badge-live">
+                        <span className="mono-badge mono-badge-live" role="status" aria-label={`${completedCount} of ${matchCount} matches completed`}>
                           {completedCount}/{matchCount}
                         </span>
                         {t.teams?.length === 2 && (
@@ -105,12 +107,13 @@ export default function MonoTournamentList() {
                       {t.format?.overs ? ` \u00b7 ${t.format.overs} overs` : ''}
                       {t.format?.sets ? ` \u00b7 Best of ${t.format.sets}` : ''}
                     </p>
-                  </div>
+                  </button>
                   <div style={{ borderTop: '1px solid #eee', padding: '8px 20px' }}>
                     <button
                       onClick={(e) => { e.stopPropagation(); deleteTournament(t.id); }}
                       className="text-xs bg-transparent border-none cursor-pointer font-swiss"
                       style={{ color: '#dc2626' }}
+                      aria-label={`Delete ${t.name} tournament`}
                     >
                       Delete
                     </button>

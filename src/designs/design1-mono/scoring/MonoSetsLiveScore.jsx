@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getSportById } from '../../../models/sportRegistry';
 import { loadSportTournaments, saveSportTournament } from '../../../utils/storage';
+
+const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
 export default function MonoSetsLiveScore() {
   const navigate = useNavigate();
@@ -17,6 +19,9 @@ export default function MonoSetsLiveScore() {
   const [sets, setSets] = useState([{ score1: 0, score2: 0, completed: false }]);
   const [history, setHistory] = useState([]);
   const [hasChanges, setHasChanges] = useState(false);
+
+  // Debounce ref for rapid clicks
+  const lastClickRef = useRef(0);
 
   // Load tournament and match
   useEffect(() => {
@@ -68,6 +73,11 @@ export default function MonoSetsLiveScore() {
   const addPoint = (team) => {
     if (!sportConfig || !tournament) return;
 
+    // Debounce rapid clicks
+    const now = Date.now();
+    if (now - lastClickRef.current < 150) return;
+    lastClickRef.current = now;
+
     // Don't allow scoring on completed sets
     if (sets[currentSet]?.completed) return;
 
@@ -80,36 +90,35 @@ export default function MonoSetsLiveScore() {
 
     setHasChanges(true);
 
-    // Update score
-    const newSets = [...sets];
-    const scoreKey = team === 1 ? 'score1' : 'score2';
-    newSets[currentSet][scoreKey]++;
+    setSets(prevSets => {
+      const newSets = prevSets.map(s => ({ ...s }));
+      const scoreKey = team === 1 ? 'score1' : 'score2';
+      newSets[currentSet][scoreKey]++;
 
-    // Check if set complete
-    const isComplete = checkSetComplete(newSets[currentSet]);
-    if (isComplete) {
-      newSets[currentSet].completed = true;
+      // Check if set complete
+      const isComplete = checkSetComplete(newSets[currentSet]);
+      if (isComplete) {
+        newSets[currentSet].completed = true;
 
-      // Check if match complete (only count completed sets)
-      const t1SetsWon = newSets.filter(s => s.completed && s.score1 > s.score2).length;
-      const t2SetsWon = newSets.filter(s => s.completed && s.score2 > s.score1).length;
-      const setsToWin = Math.ceil(tournament.format.sets / 2);
+        // Check if match complete (only count completed sets)
+        const t1SetsWon = newSets.filter(s => s.completed && s.score1 > s.score2).length;
+        const t2SetsWon = newSets.filter(s => s.completed && s.score2 > s.score1).length;
+        const setsToWin = Math.ceil(tournament.format.sets / 2);
 
-      if (t1SetsWon >= setsToWin || t2SetsWon >= setsToWin) {
-        // Match complete - update state and return
-        setSets(newSets);
-        return;
+        if (t1SetsWon >= setsToWin || t2SetsWon >= setsToWin) {
+          // Match complete
+          return newSets;
+        }
+
+        // Start next set
+        if (currentSet < tournament.format.sets - 1) {
+          newSets.push({ score1: 0, score2: 0, completed: false });
+          setCurrentSet(prev => prev + 1);
+        }
       }
 
-      // Start next set
-      if (currentSet < tournament.format.sets - 1) {
-        newSets.push({ score1: 0, score2: 0, completed: false });
-        setCurrentSet(currentSet + 1);
-      }
-    }
-
-    // Update state once at the end
-    setSets(newSets);
+      return newSets;
+    });
   };
 
   // Undo last action
@@ -157,8 +166,10 @@ export default function MonoSetsLiveScore() {
     navigate(`/${sport}/tournament/${id}`);
   };
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts (skip on touch-only devices)
   useEffect(() => {
+    if (isTouchDevice) return;
+
     const handleKeyPress = (e) => {
       // Ignore if user is typing in an input
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -232,7 +243,8 @@ export default function MonoSetsLiveScore() {
             style={{
               padding: '24px 16px',
               cursor: isCurrentSetComplete ? 'default' : 'pointer',
-              opacity: isCurrentSetComplete ? 0.6 : 1
+              opacity: isCurrentSetComplete ? 0.6 : 1,
+              touchAction: 'manipulation',
             }}
           >
             <p className="text-xs uppercase tracking-widest mb-4" style={{ color: '#888' }}>
@@ -253,7 +265,8 @@ export default function MonoSetsLiveScore() {
             style={{
               padding: '24px 16px',
               cursor: isCurrentSetComplete ? 'default' : 'pointer',
-              opacity: isCurrentSetComplete ? 0.6 : 1
+              opacity: isCurrentSetComplete ? 0.6 : 1,
+              touchAction: 'manipulation',
             }}
           >
             <p className="text-xs uppercase tracking-widest mb-4" style={{ color: '#888' }}>
@@ -272,9 +285,11 @@ export default function MonoSetsLiveScore() {
         <p className="text-xs text-center mb-2" style={{ color: '#bbb' }}>
           {targetPoints} points to win &middot; Win by {winBy}
         </p>
-        <p className="text-xs text-center mb-6" style={{ color: '#ccc' }}>
-          Keyboard: Q = {team1Name} &middot; P = {team2Name} &middot; U = Undo
-        </p>
+        {!isTouchDevice && (
+          <p className="text-xs text-center mb-6" style={{ color: '#ccc' }}>
+            Keyboard: Q = {team1Name} &middot; P = {team2Name} &middot; U = Undo
+          </p>
+        )}
 
         {/* Set history */}
         {sets.filter(s => s.completed).length > 0 && (
@@ -295,7 +310,7 @@ export default function MonoSetsLiveScore() {
             onClick={undo}
             disabled={history.length === 0}
             className="mono-btn"
-            style={{ opacity: history.length === 0 ? 0.4 : 1 }}
+            style={{ opacity: history.length === 0 ? 0.4 : 1, touchAction: 'manipulation' }}
           >
             Undo
           </button>

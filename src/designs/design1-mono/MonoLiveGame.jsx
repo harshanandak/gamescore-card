@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useGameSession } from '../../hooks/useGameSession';
 import { useTimer } from '../../hooks/useTimer';
 
+const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
 export default function MonoLiveGame() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -18,6 +20,7 @@ export default function MonoLiveGame() {
 
   const [visible, setVisible] = useState(false);
   const timerStartedRef = useRef(false);
+  const lastClickRef = useRef(0);
 
   // Fade in
   useEffect(() => {
@@ -42,6 +45,11 @@ export default function MonoLiveGame() {
 
   const handleScoreChange = useCallback(
     (participantId, delta) => {
+      // Debounce rapid clicks
+      const now = Date.now();
+      if (now - lastClickRef.current < 150) return;
+      lastClickRef.current = now;
+
       updateScore(participantId, delta);
     },
     [updateScore]
@@ -259,6 +267,7 @@ export default function MonoLiveGame() {
                       handleScoreChange(participant.id, -(session.pointIncrement || 1))
                     }
                     className="mono-score-btn"
+                    style={{ touchAction: 'manipulation' }}
                   >
                     &minus;
                   </button>
@@ -267,6 +276,7 @@ export default function MonoLiveGame() {
                       handleScoreChange(participant.id, session.pointIncrement || 1)
                     }
                     className="mono-score-btn"
+                    style={{ touchAction: 'manipulation' }}
                   >
                     +
                   </button>

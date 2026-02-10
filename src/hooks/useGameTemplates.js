@@ -1,12 +1,22 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { PRESETS } from '../models/presets';
 import { loadTemplates, saveTemplate, deleteTemplate } from '../utils/universalStorage';
 
 export function useGameTemplates() {
   const [customTemplates, setCustomTemplates] = useState([]);
+  const isMounted = useRef(true);
 
   useEffect(() => {
-    setCustomTemplates(loadTemplates());
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const templates = loadTemplates();
+    if (isMounted.current) {
+      setCustomTemplates(templates);
+    }
   }, []);
 
   const allTemplates = [...PRESETS, ...customTemplates];

@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getSportById } from '../../../models/sportRegistry';
 import { loadSportTournaments, saveSportTournament } from '../../../utils/storage';
+
+const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
 export default function MonoGoalsLiveScore() {
   const navigate = useNavigate();
@@ -17,6 +19,14 @@ export default function MonoGoalsLiveScore() {
   const [score2, setScore2] = useState(0);
   const [history, setHistory] = useState([]);
   const [hasChanges, setHasChanges] = useState(false);
+
+  // Debounce ref for rapid clicks
+  const lastClickRef = useRef(0);
+  // Track current scores for history snapshots
+  const score1Ref = useRef(score1);
+  const score2Ref = useRef(score2);
+  score1Ref.current = score1;
+  score2Ref.current = score2;
 
   // Load tournament and match
   useEffect(() => {
@@ -45,12 +55,17 @@ export default function MonoGoalsLiveScore() {
   const addScore = (team, value = 1) => {
     if (!sportConfig || !tournament) return;
 
-    // Save to history BEFORE modifying
+    // Debounce rapid clicks
+    const now = Date.now();
+    if (now - lastClickRef.current < 150) return;
+    lastClickRef.current = now;
+
+    // Save to history BEFORE modifying (use refs for current values)
     setHistory(prev => [...prev, {
       timestamp: Date.now(),
-      score1,
-      score2,
-    }].slice(-100)); // Keep last 100
+      score1: score1Ref.current,
+      score2: score2Ref.current,
+    }].slice(-100));
 
     setHasChanges(true);
 
@@ -72,8 +87,10 @@ export default function MonoGoalsLiveScore() {
     setHistory(prev => prev.slice(0, -1));
   };
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts (skip on touch-only devices)
   useEffect(() => {
+    if (isTouchDevice) return;
+
     const handleKeyPress = (e) => {
       // Ignore if user is typing in an input
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -184,6 +201,7 @@ export default function MonoGoalsLiveScore() {
                     key={idx}
                     onClick={() => addScore(1, btn.value)}
                     className="mono-btn text-sm py-2"
+                    style={{ touchAction: 'manipulation' }}
                   >
                     {btn.label}
                   </button>
@@ -192,6 +210,7 @@ export default function MonoGoalsLiveScore() {
                 <button
                   onClick={() => addScore(1, 1)}
                   className="mono-btn-primary text-lg py-3"
+                  style={{ touchAction: 'manipulation' }}
                 >
                   + 1
                 </button>
@@ -219,6 +238,7 @@ export default function MonoGoalsLiveScore() {
                     key={idx}
                     onClick={() => addScore(2, btn.value)}
                     className="mono-btn text-sm py-2"
+                    style={{ touchAction: 'manipulation' }}
                   >
                     {btn.label}
                   </button>
@@ -227,6 +247,7 @@ export default function MonoGoalsLiveScore() {
                 <button
                   onClick={() => addScore(2, 1)}
                   className="mono-btn-primary text-lg py-3"
+                  style={{ touchAction: 'manipulation' }}
                 >
                   + 1
                 </button>
@@ -239,9 +260,11 @@ export default function MonoGoalsLiveScore() {
         <p className="text-xs text-center mb-2" style={{ color: '#bbb' }}>
           {sportConfig.config.drawAllowed ? 'Draws allowed' : 'No draws'} · Tap buttons to score
         </p>
-        <p className="text-xs text-center mb-6" style={{ color: '#ccc' }}>
-          Keyboard: Q = {team1Name} &middot; P = {team2Name} &middot; U = Undo
-        </p>
+        {!isTouchDevice && (
+          <p className="text-xs text-center mb-6" style={{ color: '#ccc' }}>
+            Keyboard: Q = {team1Name} &middot; P = {team2Name} &middot; U = Undo
+          </p>
+        )}
 
         {/* Bottom bar */}
         <div className="flex justify-between items-center pt-4" style={{ borderTop: '1px solid #eee' }}>
@@ -249,7 +272,7 @@ export default function MonoGoalsLiveScore() {
             onClick={undo}
             disabled={history.length === 0}
             className="mono-btn"
-            style={{ opacity: history.length === 0 ? 0.4 : 1 }}
+            style={{ opacity: history.length === 0 ? 0.4 : 1, touchAction: 'manipulation' }}
           >
             Undo
           </button>

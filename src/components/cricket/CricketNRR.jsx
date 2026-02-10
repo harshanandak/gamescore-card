@@ -10,7 +10,7 @@ const createDefaultTeams = (count = 5) => {
   }));
 };
 
-export default function CricketNRR({ onBack, mode = 'tournament' }) {
+const CricketNRR = React.memo(function CricketNRR({ onBack, mode = 'tournament' }) {
   const [tournaments, setTournaments] = useState([]);
   const [currentTournament, setCurrentTournament] = useState(null);
   const [activeTab, setActiveTab] = useState('matches');
@@ -587,4 +587,6 @@ export default function CricketNRR({ onBack, mode = 'tournament' }) {
       )}
     </div>
   );
-}
+});
+
+export default CricketNRR;

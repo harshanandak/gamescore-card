@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { loadCricketTournaments, saveCricketTournament } from '../../utils/storage';
 import { ballsToOvers, calculateCricketPointsTable } from '../../utils/cricketCalculations';
@@ -21,6 +21,15 @@ export default function MonoCricketTournament() {
     if (tournament) saveCricketTournament(tournament);
   }, [tournament]);
 
+  // Memoize points table (must be before early returns to satisfy rules of hooks)
+  const pointsTable = useMemo(
+    () => {
+      if (!tournament) return [];
+      return calculateCricketPointsTable(tournament.teams, tournament.matches);
+    },
+    [tournament]
+  );
+
   if (!tournament) {
     return (
       <div className="min-h-screen px-6 py-10 flex items-center justify-center">
@@ -36,7 +45,6 @@ export default function MonoCricketTournament() {
 
   const completedMatches = tournament.matches.filter(m => m.status === 'completed').length;
   const totalMatches = tournament.matches.length;
-  const pointsTable = calculateCricketPointsTable(tournament.teams, tournament.matches);
 
   const clearScore = (matchId) => {
     setTournament(prev => ({

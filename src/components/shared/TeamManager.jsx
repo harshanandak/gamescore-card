@@ -60,15 +60,16 @@ export default function TeamManager({ teams, onUpdateTeams, maxTeams = 10, minTe
   };
 
   return (
-    <div className="space-y-3">
+    <ul className="space-y-3" style={{ listStyle: 'none', padding: 0, margin: 0 }} aria-label="Team list">
       {/* Team List */}
       {teams.map((team, idx) => (
-        <div key={team.id || idx} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+        <li key={team.id || idx} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
           {editingIndex === idx ? (
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Team Name</label>
+                <label htmlFor={`edit-team-name-${idx}`} className="block text-xs text-gray-400 mb-1">Team Name</label>
                 <input
+                  id={`edit-team-name-${idx}`}
                   type="text"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
@@ -78,8 +79,9 @@ export default function TeamManager({ teams, onUpdateTeams, maxTeams = 10, minTe
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Members (comma separated)</label>
+                <label htmlFor={`edit-team-members-${idx}`} className="block text-xs text-gray-400 mb-1">Members (comma separated)</label>
                 <input
+                  id={`edit-team-members-${idx}`}
                   type="text"
                   value={editMembers}
                   onChange={(e) => setEditMembers(e.target.value)}
@@ -105,7 +107,7 @@ export default function TeamManager({ teams, onUpdateTeams, maxTeams = 10, minTe
           ) : (
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3 flex-1 min-w-0">
-                <span className="w-8 h-8 bg-orange-500/20 text-orange-400 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0">
+                <span className="w-8 h-8 bg-orange-500/20 text-orange-400 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0" aria-hidden="true">
                   {idx + 1}
                 </span>
                 <div className="min-w-0">
@@ -121,19 +123,21 @@ export default function TeamManager({ teams, onUpdateTeams, maxTeams = 10, minTe
                 <button
                   onClick={() => startEdit(idx)}
                   className="text-blue-400 hover:text-blue-300 text-sm px-2 py-1"
+                  aria-label={`Edit ${team.name}`}
                 >
                   Edit
                 </button>
                 <button
                   onClick={() => deleteTeam(idx)}
                   className="text-red-400 hover:text-red-300 text-sm px-2 py-1"
+                  aria-label={`Delete ${team.name}`}
                 >
                   Delete
                 </button>
               </div>
             </div>
           )}
-        </div>
+        </li>
       ))}
 
       {/* Add Team Form */}
@@ -141,8 +145,9 @@ export default function TeamManager({ teams, onUpdateTeams, maxTeams = 10, minTe
         <div className="bg-gray-800 rounded-xl p-4 border border-gray-700 border-dashed">
           <div className="space-y-3">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Team Name</label>
+              <label htmlFor="new-team-name" className="block text-xs text-gray-400 mb-1">Team Name</label>
               <input
+                id="new-team-name"
                 type="text"
                 value={newTeamName}
                 onChange={(e) => setNewTeamName(e.target.value)}
@@ -152,8 +157,9 @@ export default function TeamManager({ teams, onUpdateTeams, maxTeams = 10, minTe
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Members (comma separated, optional)</label>
+              <label htmlFor="new-team-members" className="block text-xs text-gray-400 mb-1">Members (comma separated, optional)</label>
               <input
+                id="new-team-members"
                 type="text"
                 value={newTeamMembers}
                 onChange={(e) => setNewTeamMembers(e.target.value)}
@@ -185,6 +191,6 @@ export default function TeamManager({ teams, onUpdateTeams, maxTeams = 10, minTe
           + Add Team
         </button>
       )}
-    </div>
+    </ul>
   );
 }

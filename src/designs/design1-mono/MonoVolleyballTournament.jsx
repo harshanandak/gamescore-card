@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { loadVolleyballTournaments, saveVolleyballTournament } from '../../utils/storage';
-import { calculateVolleyballStandings, validateSingleSetScore } from '../../utils/volleyballCalculations';
+import { validateSingleSetScore } from '../../utils/volleyballCalculations';
 
 export default function MonoVolleyballTournament() {
   const navigate = useNavigate();
@@ -25,36 +25,10 @@ export default function MonoVolleyballTournament() {
     if (tournament) saveVolleyballTournament(tournament);
   }, [tournament]);
 
-  if (!tournament) {
-    return (
-      <div className="min-h-screen px-6 py-10 flex items-center justify-center">
-        <p style={{ color: '#888' }}>Tournament not found</p>
-      </div>
-    );
-  }
+  // Memoize standings (must be before early returns to satisfy rules of hooks)
+  const standings = useMemo(() => {
+    if (!tournament) return [];
 
-  const getTeamName = (teamId) => {
-    // Support both old format (index) and new format (string id)
-    if (typeof teamId === 'number') {
-      return tournament.teams[teamId]?.name || 'Unknown';
-    }
-    const team = tournament.teams.find(t => t.id === teamId);
-    return team?.name || 'Unknown';
-  };
-
-  const getTeamId = (match, teamKey) => {
-    // Handle both old (team1/team2 as index) and new (team1Id/team2Id) formats
-    return match[`${teamKey}Id`] ?? match[teamKey];
-  };
-
-  const target = tournament.format?.target || 10;
-  const completedMatches = tournament.matches.filter(m =>
-    (m.score1 !== null && m.score1 !== undefined) || m.status === 'completed'
-  ).length;
-  const totalMatches = tournament.matches.length;
-
-  // Build standings supporting both data formats
-  const standings = (() => {
     const stats = tournament.teams.map((team, idx) => ({
       teamId: team.id || idx,
       teamName: team.name,
@@ -87,7 +61,30 @@ export default function MonoVolleyballTournament() {
       if (b.matchPoints !== a.matchPoints) return b.matchPoints - a.matchPoints;
       return b.diff - a.diff;
     });
-  })();
+  }, [tournament]);
+
+  if (!tournament) {
+    return (
+      <div className="min-h-screen px-6 py-10 flex items-center justify-center">
+        <p style={{ color: '#888' }}>Tournament not found</p>
+      </div>
+    );
+  }
+
+  const getTeamName = (teamId) => {
+    // Support both old format (index) and new format (string id)
+    if (typeof teamId === 'number') {
+      return tournament.teams[teamId]?.name || 'Unknown';
+    }
+    const team = tournament.teams.find(t => t.id === teamId);
+    return team?.name || 'Unknown';
+  };
+
+  const target = tournament.format?.target || 10;
+  const completedMatches = tournament.matches.filter(m =>
+    (m.score1 !== null && m.score1 !== undefined) || m.status === 'completed'
+  ).length;
+  const totalMatches = tournament.matches.length;
 
   const openScoring = (index) => {
     setScoringMatch(index);

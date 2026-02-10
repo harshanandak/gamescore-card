@@ -138,7 +138,7 @@ export default function MonoTournamentSetup() {
     <div className={`min-h-screen px-6 py-10 mono-transition ${visible ? 'mono-visible' : 'mono-hidden'}`}>
       <div className="max-w-2xl mx-auto">
         {/* Breadcrumb */}
-        <div className="flex items-center gap-2 mb-8">
+        <nav className="flex items-center gap-2 mb-8" aria-label="Breadcrumb">
           <button
             onClick={() => navigate('/')}
             className="text-sm bg-transparent border-none cursor-pointer font-swiss"
@@ -146,11 +146,11 @@ export default function MonoTournamentSetup() {
           >
             Home
           </button>
-          <span style={{ color: '#ccc' }}>/</span>
-          <span className="text-sm" style={{ color: '#111' }}>
+          <span style={{ color: '#ccc' }} aria-hidden="true">/</span>
+          <span className="text-sm" style={{ color: '#111' }} aria-current="page">
             {sportConfig.name} Tournament
           </span>
-        </div>
+        </nav>
 
         <h1 className="text-xl font-semibold tracking-tight mb-8" style={{ color: '#111' }}>
           New Tournament
@@ -161,10 +161,11 @@ export default function MonoTournamentSetup() {
           <div className="animate-fade-in">
             {/* Tournament Name */}
             <div className="mb-8">
-              <label className="text-xs uppercase tracking-widest font-normal mb-3 block" style={{ color: '#888' }}>
+              <label htmlFor="tournament-name" className="text-xs uppercase tracking-widest font-normal mb-3 block" style={{ color: '#888' }}>
                 Tournament name
               </label>
               <input
+                id="tournament-name"
                 type="text"
                 className="mono-input text-lg"
                 placeholder={isCricket ? 'Weekend Cricket League' : 'Volleyball Championship'}
@@ -177,9 +178,9 @@ export default function MonoTournamentSetup() {
             {/* Format */}
             {sportConfig.engine === 'custom-cricket' && (
               <div className="mb-8">
-                <label className="text-xs uppercase tracking-widest font-normal mb-3 block" style={{ color: '#888' }}>
+                <span id="overs-label" className="text-xs uppercase tracking-widest font-normal mb-3 block" style={{ color: '#888' }}>
                   Overs per innings
-                </label>
+                </span>
 
                 <div className="flex gap-2 flex-wrap mb-3">
                   {OVERS_PRESETS.map(preset => (
@@ -198,8 +199,9 @@ export default function MonoTournamentSetup() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <span className="text-xs" style={{ color: '#888' }}>Custom:</span>
+                  <label htmlFor="custom-overs" className="text-xs" style={{ color: '#888' }}>Custom:</label>
                   <input
+                    id="custom-overs"
                     type="number"
                     min="1"
                     max="50"
@@ -221,9 +223,9 @@ export default function MonoTournamentSetup() {
             {/* Sets-based format */}
             {sportConfig.engine === 'sets' && sportConfig.config.setFormats && (
               <div className="mb-8">
-                <label className="text-xs uppercase tracking-widest font-normal mb-3 block" style={{ color: '#888' }}>
+                <span id="format-label" className="text-xs uppercase tracking-widest font-normal mb-3 block" style={{ color: '#888' }}>
                   Format
-                </label>
+                </span>
                 <div className="flex gap-2 flex-wrap">
                   {sportConfig.config.setFormats.map((formatOption, idx) => (
                     <button
@@ -240,10 +242,10 @@ export default function MonoTournamentSetup() {
             )}
 
             {/* Team Count */}
-            <div className="mb-10">
-              <label className="text-xs uppercase tracking-widest font-normal mb-3 block" style={{ color: '#888' }}>
+            <fieldset className="mb-10" style={{ border: 'none', padding: 0, margin: 0 }}>
+              <legend className="text-xs uppercase tracking-widest font-normal mb-3 block" style={{ color: '#888', padding: 0 }}>
                 Number of teams
-              </label>
+              </legend>
               <div className="flex gap-2">
                 {teamCountOptions.map(n => (
                   <button
@@ -261,7 +263,7 @@ export default function MonoTournamentSetup() {
                 {teamCount === 2 && ' (single elimination)'}
                 {teamCount >= 3 && ' (round-robin format)'}
               </p>
-            </div>
+            </fieldset>
 
             <hr className="mono-divider mb-8" />
 
@@ -281,9 +283,9 @@ export default function MonoTournamentSetup() {
           <div className="animate-fade-in">
             <div className="mb-8">
               <div className="flex items-center justify-between mb-4">
-                <label className="text-xs uppercase tracking-widest font-normal" style={{ color: '#888' }}>
+                <span className="text-xs uppercase tracking-widest font-normal" style={{ color: '#888' }}>
                   Team names
-                </label>
+                </span>
                 <button
                   onClick={() => setStep(1)}
                   className="text-xs bg-transparent border-none cursor-pointer font-swiss"
@@ -305,6 +307,7 @@ export default function MonoTournamentSetup() {
                       value={team.name}
                       onChange={(e) => updateTeamName(i, e.target.value)}
                       placeholder={`Team ${i + 1}`}
+                      aria-label={`Team ${i + 1} name`}
                     />
                   </div>
                 ))}
@@ -327,9 +330,9 @@ export default function MonoTournamentSetup() {
             {/* Player Roster Section */}
             <div className="mb-8">
               <div className="flex items-center justify-between mb-4">
-                <label className="text-xs uppercase tracking-widest font-normal" style={{ color: '#888' }}>
+                <span className="text-xs uppercase tracking-widest font-normal" style={{ color: '#888' }}>
                   Add Players (Optional)
-                </label>
+                </span>
                 <button
                   onClick={() => setStep(2)}
                   className="text-xs bg-transparent border-none cursor-pointer font-swiss"
@@ -351,11 +354,13 @@ export default function MonoTournamentSetup() {
                         onChange={(e) => updateMember(idx, mIdx, e.target.value)}
                         className="mono-input flex-1"
                         placeholder={`Player ${mIdx + 1}`}
+                        aria-label={`Player ${mIdx + 1} name for ${team.name}`}
                       />
                       <button
                         onClick={() => removeMember(idx, mIdx)}
                         className="text-xs bg-transparent border-none cursor-pointer"
                         style={{ color: '#dc2626' }}
+                        aria-label={`Remove player ${mIdx + 1} from ${team.name}`}
                       >
                         ✕
                       </button>

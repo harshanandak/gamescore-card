@@ -47,7 +47,7 @@ export default function MonoLanding() {
     <div className={`min-h-screen mono-transition ${visible ? 'mono-visible' : 'mono-hidden'}`}>
 
       {/* ─── Nav ─── */}
-      <nav className="px-6 py-5">
+      <nav className="px-6 py-5" aria-label="Main navigation">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-base font-semibold tracking-tight" style={{ color: '#111' }}>
@@ -126,11 +126,13 @@ export default function MonoLanding() {
 
       {/* ─── Returning user: resume banner ─── */}
       {hasData && (
-        <section className="px-6 pb-10">
+        <section className="px-6 pb-10" aria-label="Welcome back summary">
           <div className="max-w-3xl mx-auto">
             <div
               className="mono-card flex items-center justify-between"
               style={{ padding: '14px 20px', borderLeft: '3px solid #0066ff' }}
+              role="status"
+              aria-label={`${stats.tournaments} tournaments, ${stats.matches} matches played`}
             >
               <div>
                 <p className="text-sm font-medium" style={{ color: '#111' }}>
@@ -243,6 +245,7 @@ export default function MonoLanding() {
                   <button
                     key={sport.id}
                     onClick={() => setSelectedSport(sport)}
+                    aria-label={`Select ${sport.name}`}
                     className="mono-card cursor-pointer hover:border-blue-200 transition-colors flex-shrink-0"
                     style={{
                       padding: '16px',
@@ -253,7 +256,7 @@ export default function MonoLanding() {
                     }}
                   >
                     <div className="flex flex-col items-center text-center">
-                      <span className="text-3xl mb-2">{sport.icon}</span>
+                      <span className="text-3xl mb-2" aria-hidden="true">{sport.icon}</span>
                       <p className="text-xs font-medium" style={{ color: '#111' }}>
                         {sport.name}
                       </p>
@@ -268,6 +271,7 @@ export default function MonoLanding() {
                   <button
                     key={sport.id}
                     onClick={() => setSelectedSport(sport)}
+                    aria-label={`Select ${sport.name}`}
                     className="mono-card cursor-pointer hover:border-blue-200 transition-colors"
                     style={{
                       padding: '16px',
@@ -276,7 +280,7 @@ export default function MonoLanding() {
                     }}
                   >
                     <div className="flex flex-col items-center text-center">
-                      <span className="text-3xl mb-2">{sport.icon}</span>
+                      <span className="text-3xl mb-2" aria-hidden="true">{sport.icon}</span>
                       <p className="text-xs font-medium" style={{ color: '#111' }}>
                         {sport.name}
                       </p>
@@ -359,6 +363,9 @@ export default function MonoLanding() {
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center p-6 z-50"
           onClick={() => setSelectedSport(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${selectedSport.name} game mode selection`}
         >
           <div
             className="bg-white rounded-lg p-6 max-w-md w-full"
@@ -366,7 +373,7 @@ export default function MonoLanding() {
             style={{ background: '#fff' }}
           >
             <div className="flex items-center gap-3 mb-6">
-              <span className="text-4xl">{selectedSport.icon}</span>
+              <span className="text-4xl" aria-hidden="true">{selectedSport.icon}</span>
               <div>
                 <h2 className="text-xl font-semibold" style={{ color: '#111' }}>
                   {selectedSport.name}
@@ -456,7 +463,7 @@ function SportCard({ icon, name, features, onTournament, onQuick }) {
     <div className="mono-card" style={{ padding: 0 }}>
       <div style={{ padding: '24px 24px 16px' }}>
         <div className="flex items-center gap-3 mb-4">
-          <span className="text-3xl">{icon}</span>
+          <span className="text-3xl" aria-hidden="true">{icon}</span>
           <h3 className="text-lg font-semibold" style={{ color: '#111' }}>
             {name}
           </h3>

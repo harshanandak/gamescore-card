@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { loadCricketTournaments, saveCricketTournament } from '../../../utils/storage';
 import { ballsToOvers, calculateRunRate } from '../../../utils/cricketCalculations';
+
+const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
 export default function MonoCricketLiveScore() {
   const navigate = useNavigate();
@@ -20,6 +22,9 @@ export default function MonoCricketLiveScore() {
   });
   const [history, setHistory] = useState([]);
   const [hasChanges, setHasChanges] = useState(false);
+
+  // Debounce ref for rapid clicks
+  const lastClickRef = useRef(0);
 
   // Load tournament and match
   useEffect(() => {
@@ -52,6 +57,11 @@ export default function MonoCricketLiveScore() {
   // Add runs
   const addRuns = (runs) => {
     if (!tournament) return;
+
+    // Debounce rapid clicks
+    const now = Date.now();
+    if (now - lastClickRef.current < 150) return;
+    lastClickRef.current = now;
 
     // Save to history
     setHistory(prev => [...prev, {
@@ -96,6 +106,11 @@ export default function MonoCricketLiveScore() {
   // Add wicket
   const addWicket = () => {
     if (!tournament) return;
+
+    // Debounce rapid clicks
+    const now = Date.now();
+    if (now - lastClickRef.current < 150) return;
+    lastClickRef.current = now;
 
     // Save to history
     setHistory(prev => [...prev, {
@@ -142,6 +157,11 @@ export default function MonoCricketLiveScore() {
   const addExtra = (type) => {
     if (!tournament) return;
 
+    // Debounce rapid clicks
+    const now = Date.now();
+    if (now - lastClickRef.current < 150) return;
+    lastClickRef.current = now;
+
     // Save to history
     setHistory(prev => [...prev, {
       timestamp: Date.now(),
@@ -173,9 +193,10 @@ export default function MonoCricketLiveScore() {
     setHistory(prev => prev.slice(0, -1));
   };
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts (skip on touch-only devices)
   useEffect(() => {
     if (!tournament) return;
+    if (isTouchDevice) return;
 
     const handleKeyPress = (e) => {
       // Ignore if user is typing in an input
@@ -310,9 +331,11 @@ export default function MonoCricketLiveScore() {
               Target: {target + 1} · Need {Math.max(0, target + 1 - currentScore.runs)} from {totalBalls - currentScore.balls} balls
             </p>
           )}
-          <p className="text-xs mt-3" style={{ color: '#ccc' }}>
-            Keyboard: 0-6 = Runs &middot; W = Wicket &middot; E = Extra &middot; U = Undo
-          </p>
+          {!isTouchDevice && (
+            <p className="text-xs mt-3" style={{ color: '#ccc' }}>
+              Keyboard: 0-6 = Runs &middot; W = Wicket &middot; E = Extra &middot; U = Undo
+            </p>
+          )}
         </div>
 
         {/* Other team score */}
@@ -340,6 +363,7 @@ export default function MonoCricketLiveScore() {
                     fontWeight: 700,
                     padding: 0,
                     opacity: isInningsComplete ? 0.5 : 1,
+                    touchAction: 'manipulation',
                   }}
                 >
                   {r}
@@ -357,6 +381,7 @@ export default function MonoCricketLiveScore() {
                   padding: '10px 16px',
                   fontSize: '0.8125rem',
                   opacity: isInningsComplete ? 0.5 : 1,
+                  touchAction: 'manipulation',
                 }}
               >
                 Wide
@@ -369,6 +394,7 @@ export default function MonoCricketLiveScore() {
                   padding: '10px 16px',
                   fontSize: '0.8125rem',
                   opacity: isInningsComplete ? 0.5 : 1,
+                  touchAction: 'manipulation',
                 }}
               >
                 No Ball
@@ -386,6 +412,7 @@ export default function MonoCricketLiveScore() {
                 borderColor: '#dc2626',
                 color: '#dc2626',
                 opacity: isInningsComplete ? 0.5 : 1,
+                touchAction: 'manipulation',
               }}
             >
               Wicket
@@ -411,7 +438,7 @@ export default function MonoCricketLiveScore() {
             onClick={undo}
             disabled={history.length === 0}
             className="mono-btn"
-            style={{ opacity: history.length === 0 ? 0.4 : 1 }}
+            style={{ opacity: history.length === 0 ? 0.4 : 1, touchAction: 'manipulation' }}
           >
             Undo
           </button>

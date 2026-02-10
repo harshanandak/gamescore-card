@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { OVERS_PRESETS, ballsToOvers, calculateRunRate } from '../../utils/cricketCalculations';
 import { POINTS_PRESETS, validateSingleSetScore } from '../../utils/volleyballCalculations';
 import { saveData, loadData } from '../../utils/storage';
+
+const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
 const QM_KEY = 'gamescore_quickmatches';
 
@@ -19,6 +21,9 @@ export default function MonoQuickMatch() {
 
   const [phase, setPhase] = useState('setup'); // setup | scoring | result
   const [visible] = useState(true);
+
+  // Debounce ref for rapid clicks
+  const lastClickRef = useRef(0);
 
   // Setup state
   const [team1Name, setTeam1Name] = useState('');
@@ -49,6 +54,11 @@ export default function MonoQuickMatch() {
 
   // Cricket: Add runs
   const addRuns = (runs) => {
+    // Debounce rapid clicks
+    const now = Date.now();
+    if (now - lastClickRef.current < 150) return;
+    lastClickRef.current = now;
+
     const key = battingTeam === 1 ? 'team1' : 'team2';
     setScores(prev => {
       const team = { ...prev[key] };
@@ -78,6 +88,11 @@ export default function MonoQuickMatch() {
   };
 
   const addWicket = () => {
+    // Debounce rapid clicks
+    const now = Date.now();
+    if (now - lastClickRef.current < 150) return;
+    lastClickRef.current = now;
+
     const key = battingTeam === 1 ? 'team1' : 'team2';
     setScores(prev => {
       const team = { ...prev[key] };
@@ -100,6 +115,11 @@ export default function MonoQuickMatch() {
   };
 
   const addExtra = (type) => {
+    // Debounce rapid clicks
+    const now = Date.now();
+    if (now - lastClickRef.current < 150) return;
+    lastClickRef.current = now;
+
     const key = battingTeam === 1 ? 'team1' : 'team2';
     setScores(prev => ({
       ...prev,
@@ -127,12 +147,24 @@ export default function MonoQuickMatch() {
 
   // Volleyball: Add point
   const addPoint = (team) => {
+    // Debounce rapid clicks
+    const now = Date.now();
+    if (now - lastClickRef.current < 150) return;
+    lastClickRef.current = now;
+
     const target = format.target;
+
+    // Use functional updates to avoid stale closure
+    const updater = (prev) => prev + 1;
+    if (team === 1) {
+      setVScore1(updater);
+    } else {
+      setVScore2(updater);
+    }
+
+    // Compute new scores from current values for win check
     const newS1 = team === 1 ? vScore1 + 1 : vScore1;
     const newS2 = team === 2 ? vScore2 + 1 : vScore2;
-
-    if (team === 1) setVScore1(newS1);
-    else setVScore2(newS2);
 
     // Check win
     if (validateSingleSetScore(newS1, newS2, target)) {
@@ -305,7 +337,7 @@ export default function MonoQuickMatch() {
                   key={r}
                   onClick={() => addRuns(r)}
                   className={r === 4 || r === 6 ? 'mono-btn-primary' : 'mono-btn'}
-                  style={{ width: '56px', height: '56px', fontSize: '1.25rem', fontWeight: 700, padding: 0 }}
+                  style={{ width: '56px', height: '56px', fontSize: '1.25rem', fontWeight: 700, padding: 0, touchAction: 'manipulation' }}
                 >
                   {r}
                 </button>
@@ -313,10 +345,10 @@ export default function MonoQuickMatch() {
             </div>
 
             <div className="flex gap-2 justify-center mb-4">
-              <button onClick={() => addExtra('wide')} className="mono-btn" style={{ padding: '10px 16px', fontSize: '0.8125rem' }}>
+              <button onClick={() => addExtra('wide')} className="mono-btn" style={{ padding: '10px 16px', fontSize: '0.8125rem', touchAction: 'manipulation' }}>
                 Wide
               </button>
-              <button onClick={() => addExtra('noBall')} className="mono-btn" style={{ padding: '10px 16px', fontSize: '0.8125rem' }}>
+              <button onClick={() => addExtra('noBall')} className="mono-btn" style={{ padding: '10px 16px', fontSize: '0.8125rem', touchAction: 'manipulation' }}>
                 No Ball
               </button>
             </div>
@@ -324,7 +356,7 @@ export default function MonoQuickMatch() {
             <button
               onClick={addWicket}
               className="mono-btn w-full"
-              style={{ padding: '14px', fontSize: '0.9375rem', borderColor: '#dc2626', color: '#dc2626' }}
+              style={{ padding: '14px', fontSize: '0.9375rem', borderColor: '#dc2626', color: '#dc2626', touchAction: 'manipulation' }}
             >
               Wicket
             </button>
@@ -351,7 +383,7 @@ export default function MonoQuickMatch() {
             <div
               className="flex-1 flex flex-col items-center justify-center cursor-pointer mono-card"
               onClick={() => addPoint(1)}
-              style={{ padding: '24px 16px' }}
+              style={{ padding: '24px 16px', touchAction: 'manipulation' }}
             >
               <p className="text-xs uppercase tracking-widest mb-4" style={{ color: '#888' }}>
                 {team1Name}
@@ -366,7 +398,7 @@ export default function MonoQuickMatch() {
             <div
               className="flex-1 flex flex-col items-center justify-center cursor-pointer mono-card"
               onClick={() => addPoint(2)}
-              style={{ padding: '24px 16px' }}
+              style={{ padding: '24px 16px', touchAction: 'manipulation' }}
             >
               <p className="text-xs uppercase tracking-widest mb-4" style={{ color: '#888' }}>
                 {team2Name}

@@ -26,7 +26,7 @@ const generateMatches = (teamCount) => {
   return matches;
 };
 
-export default function VolleyballTracker({ onBack, mode = 'tournament' }) {
+const VolleyballTracker = React.memo(function VolleyballTracker({ onBack, mode = 'tournament' }) {
   const [tournaments, setTournaments] = useState([]);
   const [currentTournament, setCurrentTournament] = useState(null);
   const [activeTab, setActiveTab] = useState('matches');
@@ -454,4 +454,6 @@ export default function VolleyballTracker({ onBack, mode = 'tournament' }) {
       </div>
     </div>
   );
-}
+});
+
+export default VolleyballTracker;

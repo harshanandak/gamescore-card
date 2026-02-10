@@ -32,12 +32,13 @@ export default function MonoHistory() {
     >
       <div className="max-w-2xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-10">
+        <nav className="flex items-center justify-between mb-10" aria-label="History navigation">
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate('/')}
               className="bg-transparent border-none cursor-pointer font-swiss text-sm"
               style={{ color: '#888' }}
+              aria-label="Go back to home"
             >
               &larr;
             </button>
@@ -54,7 +55,7 @@ export default function MonoHistory() {
               Clear All
             </button>
           )}
-        </div>
+        </nav>
 
         {/* Empty state */}
         {history.length === 0 ? (
@@ -68,92 +69,87 @@ export default function MonoHistory() {
           </div>
         ) : (
           /* Table */
-          <div>
-            {/* Table header */}
-            <div
-              className="grid items-center py-3"
-              style={{
-                gridTemplateColumns: '72px 1fr 1fr 80px 80px',
-                gap: '12px',
-                borderBottom: '1px solid #eee',
-              }}
-            >
-              <span
-                className="text-xs uppercase tracking-widest font-normal"
-                style={{ color: '#888' }}
-              >
-                Date
-              </span>
-              <span
-                className="text-xs uppercase tracking-widest font-normal"
-                style={{ color: '#888' }}
-              >
-                Game
-              </span>
-              <span
-                className="text-xs uppercase tracking-widest font-normal"
-                style={{ color: '#888' }}
-              >
-                Players
-              </span>
-              <span
-                className="text-xs uppercase tracking-widest font-normal"
-                style={{ color: '#888' }}
-              >
-                Score
-              </span>
-              <span
-                className="text-xs uppercase tracking-widest font-normal"
-                style={{ color: '#888' }}
-              >
-                Winner
-              </span>
-            </div>
-
-            {/* Table rows */}
-            {history.map((record) => {
-              const scores = record.participants
-                .map((name) => record.finalScores[name] ?? 0)
-                .join(' : ');
-
-              return (
-                <div
-                  key={record.id}
-                  className="grid items-center py-3"
-                  style={{
-                    gridTemplateColumns: '72px 1fr 1fr 80px 80px',
-                    gap: '12px',
-                    borderBottom: '1px solid #eee',
-                  }}
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <caption className="sr-only">Game history</caption>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #eee' }}>
+                <th
+                  scope="col"
+                  className="text-xs uppercase tracking-widest font-normal text-left py-3"
+                  style={{ color: '#888', width: '72px' }}
                 >
-                  <span
-                    className="text-sm font-mono"
-                    style={{ color: '#111' }}
+                  Date
+                </th>
+                <th
+                  scope="col"
+                  className="text-xs uppercase tracking-widest font-normal text-left py-3"
+                  style={{ color: '#888' }}
+                >
+                  Game
+                </th>
+                <th
+                  scope="col"
+                  className="text-xs uppercase tracking-widest font-normal text-left py-3"
+                  style={{ color: '#888' }}
+                >
+                  Players
+                </th>
+                <th
+                  scope="col"
+                  className="text-xs uppercase tracking-widest font-normal text-left py-3"
+                  style={{ color: '#888', width: '80px' }}
+                >
+                  Score
+                </th>
+                <th
+                  scope="col"
+                  className="text-xs uppercase tracking-widest font-normal text-left py-3"
+                  style={{ color: '#888', width: '80px' }}
+                >
+                  Winner
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map((record) => {
+                const scores = record.participants
+                  .map((name) => record.finalScores[name] ?? 0)
+                  .join(' : ');
+
+                return (
+                  <tr
+                    key={record.id}
+                    style={{ borderBottom: '1px solid #eee' }}
                   >
-                    {formatDate(record.completedAt)}
-                  </span>
-                  <span className="text-sm" style={{ color: '#111' }}>
-                    {record.gameName}
-                  </span>
-                  <span className="text-sm" style={{ color: '#888' }}>
-                    {record.participants.join(', ')}
-                  </span>
-                  <span
-                    className="text-sm font-mono mono-score"
-                    style={{ color: '#111' }}
-                  >
-                    {scores}
-                  </span>
-                  <span
-                    className="text-sm"
-                    style={{ color: record.winner ? '#0066ff' : '#888' }}
-                  >
-                    {record.winner || '--'}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+                    <td
+                      className="text-sm font-mono py-3"
+                      style={{ color: '#111' }}
+                    >
+                      {formatDate(record.completedAt)}
+                    </td>
+                    <td className="text-sm py-3" style={{ color: '#111' }}>
+                      {record.gameName}
+                    </td>
+                    <td className="text-sm py-3" style={{ color: '#888' }}>
+                      {record.participants.join(', ')}
+                    </td>
+                    <td
+                      className="text-sm font-mono mono-score py-3"
+                      style={{ color: '#111' }}
+                    >
+                      <span aria-live="polite">{scores}</span>
+                    </td>
+                    <td
+                      className="text-sm py-3"
+                      style={{ color: record.winner ? '#0066ff' : '#888' }}
+                    >
+                      {record.winner || '--'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </div>
     </div>

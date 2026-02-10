@@ -67,22 +67,25 @@ export default function MonoStatistics() {
   return (
     <div className={`min-h-screen px-6 py-10 mono-transition ${visible ? 'mono-visible' : 'mono-hidden'}`}>
       <div className="max-w-2xl mx-auto">
-        <div className="flex items-center gap-2 mb-2">
-          <button onClick={() => navigate('/')} className="text-sm bg-transparent border-none cursor-pointer font-swiss" style={{ color: '#888' }}>
-            \u2190 Home
+        <nav className="flex items-center gap-2 mb-2" aria-label="Breadcrumb">
+          <button onClick={() => navigate('/')} className="text-sm bg-transparent border-none cursor-pointer font-swiss" style={{ color: '#888' }} aria-label="Go back to home">
+            &larr; Home
           </button>
-        </div>
+        </nav>
 
         <h1 className="text-xl font-semibold tracking-tight mb-8" style={{ color: '#111' }}>
           Statistics
         </h1>
 
         {/* Tabs */}
-        <div className="flex gap-0 mb-8" style={{ borderBottom: '1px solid #eee' }}>
+        <div className="flex gap-0 mb-8" style={{ borderBottom: '1px solid #eee' }} role="tablist" aria-label="Statistics categories">
           {tabs.map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
+              role="tab"
+              aria-selected={tab === t.id}
+              aria-controls={`tabpanel-stats-${t.id}`}
               className="bg-transparent border-none cursor-pointer font-swiss px-4 py-3 text-sm"
               style={{
                 color: tab === t.id ? '#0066ff' : '#888',
@@ -97,7 +100,7 @@ export default function MonoStatistics() {
 
         {/* Overview */}
         {tab === 'overview' && (
-          <div>
+          <div id="tabpanel-stats-overview" role="tabpanel" aria-label="Overview">
             <div className="grid grid-cols-3 gap-3 mb-8">
               <StatCard label="Tournaments" value={totalTournaments} />
               <StatCard label="Matches" value={totalMatches} />
@@ -151,7 +154,7 @@ export default function MonoStatistics() {
         {/* Dynamic sport tabs */}
         {sportsWithData.map(sportData => (
           tab === sportData.sport.id && (
-            <div key={sportData.sport.id}>
+            <div key={sportData.sport.id} id={`tabpanel-stats-${sportData.sport.id}`} role="tabpanel" aria-label={sportData.sport.name}>
               <TeamStatsTable
                 sportId={sportData.sport.id}
                 sportName={sportData.sport.name}
@@ -165,7 +168,7 @@ export default function MonoStatistics() {
 
         {/* Quick Matches */}
         {tab === 'quick' && (
-          <div>
+          <div id="tabpanel-stats-quick" role="tabpanel" aria-label="Quick matches">
             {quickMatches.length === 0 ? (
               <EmptyState icon={'\u26A1'} label="No quick matches yet" />
             ) : (
@@ -271,19 +274,20 @@ function TeamStatsTable({ sportId, sportName, sportIcon, tournaments, engine }) 
   return (
     <div className="mono-card" style={{ padding: 0, overflow: 'hidden' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+        <caption className="sr-only">{sportName} team statistics</caption>
         <thead>
           <tr style={{ borderBottom: '1px solid #eee' }}>
-            <th className="text-left font-normal" style={{ color: '#888', padding: '12px 16px' }}>Team</th>
-            <th className="text-center font-normal font-mono" style={{ color: '#888', padding: '12px 8px' }}>P</th>
-            <th className="text-center font-normal font-mono" style={{ color: '#888', padding: '12px 8px' }}>W</th>
-            <th className="text-center font-normal font-mono" style={{ color: '#888', padding: '12px 8px' }}>L</th>
-            <th className="text-center font-normal font-mono" style={{ color: '#888', padding: '12px 16px' }}>Win%</th>
+            <th scope="col" className="text-left font-normal" style={{ color: '#888', padding: '12px 16px' }}>Team</th>
+            <th scope="col" className="text-center font-normal font-mono" style={{ color: '#888', padding: '12px 8px' }}>P</th>
+            <th scope="col" className="text-center font-normal font-mono" style={{ color: '#888', padding: '12px 8px' }}>W</th>
+            <th scope="col" className="text-center font-normal font-mono" style={{ color: '#888', padding: '12px 8px' }}>L</th>
+            <th scope="col" className="text-center font-normal font-mono" style={{ color: '#888', padding: '12px 16px' }}>Win%</th>
           </tr>
         </thead>
         <tbody>
           {data.map(row => (
             <tr key={row.name} style={{ borderBottom: '1px solid #f5f5f5' }}>
-              <td className="font-medium" style={{ color: '#111', padding: '12px 16px' }}>{row.name}</td>
+              <td scope="row" className="font-medium" style={{ color: '#111', padding: '12px 16px' }}>{row.name}</td>
               <td className="text-center font-mono" style={{ color: '#888', padding: '12px 8px' }}>{row.played}</td>
               <td className="text-center font-mono" style={{ color: '#111', padding: '12px 8px' }}>{row.won}</td>
               <td className="text-center font-mono" style={{ color: '#888', padding: '12px 8px' }}>{row.lost}</td>

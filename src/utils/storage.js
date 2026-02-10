@@ -7,20 +7,116 @@ const STORAGE_KEYS = {
   STATISTICS: 'gamescore_statistics'
 };
 
-// Generic storage functions
-export const saveData = (key, data) => {
+// --- Safari Private Mode Detection & Memory Fallback ---
+
+function createMemoryFallback() {
+  const store = {};
+  return {
+    getItem(key) {
+      return key in store ? store[key] : null;
+    },
+    setItem(key, value) {
+      store[key] = String(value);
+    },
+    removeItem(key) {
+      delete store[key];
+    },
+  };
+}
+
+function isStorageAvailable() {
+  const testKey = '__gs_storage_test__';
   try {
-    localStorage.setItem(key, JSON.stringify(data));
-    return true;
-  } catch (error) {
-    console.error('Error saving data:', error);
+    localStorage.setItem(testKey, 'test');
+    const result = localStorage.getItem(testKey);
+    localStorage.removeItem(testKey);
+    return result === 'test';
+  } catch {
     return false;
   }
+}
+
+const storageAvailable = isStorageAvailable();
+const memoryFallback = storageAvailable ? null : createMemoryFallback();
+const isPrivateMode = !storageAvailable;
+
+// Get the active storage backend
+function getStorage() {
+  return storageAvailable ? localStorage : memoryFallback;
+}
+
+// --- Quota Handling ---
+
+/**
+ * Safely saves data, catching QuotaExceededError.
+ * Returns { success: true } or { success: false, error: string }
+ */
+function safeSave(key, data) {
+  try {
+    getStorage().setItem(key, JSON.stringify(data));
+    return { success: true };
+  } catch (error) {
+    if (
+      error?.name === 'QuotaExceededError' ||
+      error?.code === 22 ||
+      error?.code === 1014 // Firefox
+    ) {
+      console.warn(`[GameScore] Storage quota exceeded when saving "${key}".`);
+      return { success: false, error: 'QuotaExceededError' };
+    }
+    console.warn(`[GameScore] Storage save failed for "${key}":`, error);
+    return { success: false, error: error?.message || 'Unknown error' };
+  }
+}
+
+/**
+ * Estimate storage usage. Returns { used, total, percentage }.
+ * total is estimated at 5MB for localStorage.
+ */
+function getStorageUsage() {
+  const ESTIMATED_TOTAL = 5 * 1024 * 1024; // 5 MB
+  let used = 0;
+  try {
+    // For memory fallback, we can't measure usage
+    if (storageAvailable) {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        const value = localStorage.getItem(key);
+        used += (key.length + (value ? value.length : 0)) * 2; // UTF-16
+      }
+    }
+  } catch {
+    // If we can't measure, return 0
+  }
+  return {
+    used,
+    total: ESTIMATED_TOTAL,
+    percentage: ESTIMATED_TOTAL > 0 ? used / ESTIMATED_TOTAL : 0,
+  };
+}
+
+/**
+ * Returns true if storage usage exceeds the threshold (default 80%).
+ */
+function isStorageNearFull(threshold = 0.8) {
+  const { percentage } = getStorageUsage();
+  return percentage >= threshold;
+}
+
+// --- Generic storage functions ---
+
+export const saveData = (key, data) => {
+  const result = safeSave(key, data);
+  if (!result.success) {
+    console.warn(`[GameScore] Failed to save "${key}": ${result.error}`);
+    return false;
+  }
+  return true;
 };
 
 export const loadData = (key, defaultValue = null) => {
   try {
-    const data = localStorage.getItem(key);
+    const data = getStorage().getItem(key);
     return data ? JSON.parse(data) : defaultValue;
   } catch (error) {
     console.error('Error loading data:', error);
@@ -30,7 +126,7 @@ export const loadData = (key, defaultValue = null) => {
 
 export const clearData = (key) => {
   try {
-    localStorage.removeItem(key);
+    getStorage().removeItem(key);
     return true;
   } catch (error) {
     console.error('Error clearing data:', error);
@@ -121,4 +217,12 @@ export const deleteSportTournament = (storageKey, tournamentId) => {
   return saveData(storageKey, filtered);
 };
 
-export { STORAGE_KEYS };
+export {
+  STORAGE_KEYS,
+  safeSave,
+  getStorageUsage,
+  isStorageNearFull,
+  isStorageAvailable,
+  isPrivateMode,
+  createMemoryFallback,
+};

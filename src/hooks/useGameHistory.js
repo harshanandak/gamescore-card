@@ -1,11 +1,21 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { loadHistory, clearHistory as clearHistoryStorage, getStats, getParticipantStats } from '../utils/universalStorage';
 
 export function useGameHistory() {
   const [history, setHistory] = useState([]);
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   const refresh = useCallback(() => {
-    setHistory(loadHistory());
+    const data = loadHistory();
+    if (isMounted.current) {
+      setHistory(data);
+    }
   }, []);
 
   useEffect(() => {

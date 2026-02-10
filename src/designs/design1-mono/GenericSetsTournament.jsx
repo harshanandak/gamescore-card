@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { loadSportTournaments, saveSportTournament } from '../../utils/storage';
 import { calculateSetsStandings } from '../../utils/standingsCalculator';
@@ -27,6 +27,15 @@ export default function GenericSetsTournament() {
     }
   }, [tournament, sportConfig]);
 
+  // Calculate standings (must be before early returns to satisfy rules of hooks)
+  const standings = useMemo(
+    () => {
+      if (!tournament || !sportConfig) return [];
+      return calculateSetsStandings(tournament.teams, tournament.matches, sportConfig.config);
+    },
+    [tournament, sportConfig]
+  );
+
   if (!sportConfig) {
     return (
       <div className="min-h-screen px-6 py-10 flex items-center justify-center">
@@ -52,9 +61,6 @@ export default function GenericSetsTournament() {
     m.sets && m.sets.length > 0 && m.status === 'completed'
   ).length;
   const totalMatches = tournament.matches.length;
-
-  // Calculate standings
-  const standings = calculateSetsStandings(tournament.teams, tournament.matches, sportConfig.config);
 
 
   const deleteScore = (matchId) => {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { loadCricketTournaments, loadVolleyballTournaments } from '../utils/storage';
 
-export default function Statistics({ onBack }) {
+const Statistics = React.memo(function Statistics({ onBack }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [cricketData, setCricketData] = useState([]);
   const [volleyballData, setVolleyballData] = useState([]);
@@ -305,4 +305,6 @@ export default function Statistics({ onBack }) {
       </div>
     </div>
   );
-}
+});
+
+export default Statistics;
