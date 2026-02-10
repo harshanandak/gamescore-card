@@ -8,11 +8,13 @@ import MonoHistory from './MonoHistory';
 import MonoTournamentList from './MonoTournamentList';
 import MonoTournamentSetup from './MonoTournamentSetup';
 import MonoCricketTournament from './MonoCricketTournament';
-import MonoVolleyballTournament from './MonoVolleyballTournament';
 import GenericSetsTournament from './GenericSetsTournament';
 import GenericGoalsTournament from './GenericGoalsTournament';
 import MonoQuickMatch from './MonoQuickMatch';
 import MonoStatistics from './MonoStatistics';
+import MonoTournamentLiveScore from './MonoTournamentLiveScore';
+import MonoMatchCardShowcase from './MonoMatchCardShowcase';
+import MonoSetDisplayShowcase from './MonoSetDisplayShowcase';
 import { getSportById } from '../../models/sportRegistry';
 import './mono.css';
 
@@ -65,10 +67,15 @@ export default function Design1Mono() {
         <Route path=":sport/tournament" element={<MonoTournamentList />} />
         <Route path=":sport/tournament/new" element={<MonoTournamentSetup />} />
         <Route path=":sport/tournament/:id" element={<TournamentDispatcher />} />
+        <Route path=":sport/tournament/:id/match/:matchId/score" element={<MonoTournamentLiveScore />} />
         <Route path=":sport/quick" element={<MonoQuickMatch />} />
 
         {/* Statistics */}
         <Route path="statistics" element={<MonoStatistics />} />
+
+        {/* Design showcase */}
+        <Route path="showcase/match-card" element={<MonoMatchCardShowcase />} />
+        <Route path="showcase/set-display" element={<MonoSetDisplayShowcase />} />
 
         {/* Generic game routes (existing) */}
         <Route path="setup" element={<MonoSetup />} />

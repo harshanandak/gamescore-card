@@ -12,9 +12,6 @@ export default function GenericSetsTournament() {
   const [tournament, setTournament] = useState(null);
   const [tab, setTab] = useState('matches');
   const [visible, setVisible] = useState(false);
-  const [scoringMatch, setScoringMatch] = useState(null);
-  const [tempSets, setTempSets] = useState([]);
-  const [scoreError, setScoreError] = useState('');
 
   useEffect(() => {
     if (!sportConfig) return;
@@ -59,107 +56,6 @@ export default function GenericSetsTournament() {
   // Calculate standings
   const standings = calculateSetsStandings(tournament.teams, tournament.matches, sportConfig.config);
 
-  const openScoring = (match) => {
-    setScoringMatch(match);
-    const existingSets = match.sets || [];
-    setTempSets(existingSets.length > 0 ? existingSets : [{ score1: '', score2: '' }]);
-    setScoreError('');
-  };
-
-  const closeScoring = () => {
-    setScoringMatch(null);
-    setTempSets([]);
-    setScoreError('');
-  };
-
-  const validateSetScore = (score1, score2, setIndex) => {
-    const s1 = Number(score1);
-    const s2 = Number(score2);
-    if (isNaN(s1) || isNaN(s2)) return { valid: false, error: 'Invalid score' };
-    if (s1 < 0 || s2 < 0) return { valid: false, error: 'Scores must be positive' };
-
-    const { pointsPerSet, deciderPoints, winBy, maxPoints } = sportConfig.config;
-    const numSets = tournament.format?.sets || 3;
-    const isDecider = setIndex === numSets - 1 && tempSets.length === numSets;
-    const target = isDecider ? deciderPoints : pointsPerSet;
-
-    const winner = Math.max(s1, s2);
-    const loser = Math.min(s1, s2);
-
-    // Must reach target
-    if (winner < target) return { valid: false, error: `First to ${target}` };
-    // Must win by N
-    if (winner - loser < winBy) return { valid: false, error: `Win by ${winBy}` };
-    // Cap if configured (badminton)
-    if (maxPoints && winner > maxPoints) return { valid: false, error: `Max ${maxPoints}` };
-    // No ties
-    if (s1 === s2) return { valid: false, error: 'No ties' };
-
-    return { valid: true };
-  };
-
-  const addSet = () => {
-    const numSets = tournament.format?.sets || 3;
-    if (tempSets.length >= numSets) {
-      setScoreError(`Max ${numSets} sets`);
-      return;
-    }
-    setTempSets([...tempSets, { score1: '', score2: '' }]);
-  };
-
-  const removeSet = (index) => {
-    if (tempSets.length === 1) return;
-    setTempSets(tempSets.filter((_, i) => i !== index));
-  };
-
-  const updateSetScore = (index, team, value) => {
-    const newSets = [...tempSets];
-    newSets[index] = { ...newSets[index], [team]: value };
-    setTempSets(newSets);
-    setScoreError('');
-  };
-
-  const saveScore = () => {
-    // Validate all sets
-    for (let i = 0; i < tempSets.length; i++) {
-      const set = tempSets[i];
-      if (!set.score1 || !set.score2) {
-        setScoreError('Fill all set scores');
-        return;
-      }
-      const validation = validateSetScore(set.score1, set.score2, i);
-      if (!validation.valid) {
-        setScoreError(`Set ${i + 1}: ${validation.error}`);
-        return;
-      }
-    }
-
-    // Count sets won
-    let t1SetsWon = 0;
-    let t2SetsWon = 0;
-    tempSets.forEach(set => {
-      const s1 = Number(set.score1);
-      const s2 = Number(set.score2);
-      if (s1 > s2) t1SetsWon++;
-      else if (s2 > s1) t2SetsWon++;
-    });
-
-    // Update match
-    const updatedMatches = tournament.matches.map(m => {
-      if (m.id === scoringMatch.id) {
-        return {
-          ...m,
-          sets: tempSets.map(s => ({ score1: Number(s.score1), score2: Number(s.score2) })),
-          status: 'completed',
-          winner: t1SetsWon > t2SetsWon ? m.team1Id : m.team2Id,
-        };
-      }
-      return m;
-    });
-
-    setTournament({ ...tournament, matches: updatedMatches });
-    closeScoring();
-  };
 
   const deleteScore = (matchId) => {
     const updatedMatches = tournament.matches.map(m => {
@@ -227,54 +123,98 @@ export default function GenericSetsTournament() {
                 });
               }
 
-              return (
-                <div key={match.id} className="mono-card p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-mono" style={{ color: '#888' }}>
-                      MATCH {idx + 1}
-                    </span>
-                    {hasScore && (
-                      <button
-                        onClick={() => deleteScore(match.id)}
-                        className="text-xs"
-                        style={{ color: '#dc2626' }}
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </div>
+              // Determine winner and colors
+              const isTeam1Winner = hasScore && t1SetsWon > t2SetsWon;
+              const isTeam2Winner = hasScore && t2SetsWon > t1SetsWon;
+              const team1Color = isTeam1Winner || !hasScore ? '#111' : '#888';
+              const team2Color = isTeam2Winner || !hasScore ? '#111' : '#888';
 
-                  <div className="grid grid-cols-3 gap-4 items-center mb-3">
-                    <div className="text-right">
-                      <div className="font-medium">{getTeamName(match.team1Id)}</div>
+              return (
+                <div key={match.id} className="mono-card p-5">
+                  {/* Header with match number and status */}
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-xs font-mono uppercase tracking-wider" style={{ color: '#aaa' }}>
+                      Match {idx + 1}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {hasScore && match.status === 'completed' && (
+                        <span className="mono-badge mono-badge-final">
+                          Completed
+                        </span>
+                      )}
+                      {hasScore && match.status !== 'completed' && (
+                        <span className="mono-badge mono-badge-live">
+                          In Progress
+                        </span>
+                      )}
                       {hasScore && (
-                        <div className="text-2xl font-mono font-bold mt-1">{t1SetsWon}</div>
+                        <button
+                          onClick={() => deleteScore(match.id)}
+                          className="text-xs opacity-50 hover:opacity-100 transition-opacity"
+                          style={{ color: '#dc2626' }}
+                        >
+                          Clear
+                        </button>
                       )}
                     </div>
-                    <div className="text-center text-xs" style={{ color: '#888' }}>
-                      vs
+                  </div>
+
+                  {/* Teams and scores */}
+                  <div className="grid grid-cols-3 gap-6 items-center mb-5">
+                    <div className="text-right">
+                      <div className="text-base font-medium mb-1" style={{ color: team1Color }}>
+                        {getTeamName(match.team1Id)}
+                      </div>
+                      {hasScore && (
+                        <div className="text-3xl font-mono font-bold" style={{ color: team1Color }}>
+                          {t1SetsWon}
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-center">
+                      <div className="text-xs font-medium" style={{ color: '#bbb' }}>vs</div>
                     </div>
                     <div className="text-left">
-                      <div className="font-medium">{getTeamName(match.team2Id)}</div>
+                      <div className="text-base font-medium mb-1" style={{ color: team2Color }}>
+                        {getTeamName(match.team2Id)}
+                      </div>
                       {hasScore && (
-                        <div className="text-2xl font-mono font-bold mt-1">{t2SetsWon}</div>
+                        <div className="text-3xl font-mono font-bold" style={{ color: team2Color }}>
+                          {t2SetsWon}
+                        </div>
                       )}
                     </div>
                   </div>
 
+                  {/* Set scores */}
                   {hasScore && (
-                    <div className="text-xs space-y-1 mb-3" style={{ color: '#888' }}>
-                      {match.sets.map((set, i) => (
-                        <div key={i} className="flex justify-center gap-2">
-                          <span>Set {i + 1}:</span>
-                          <span className="font-mono">{set.score1}-{set.score2}</span>
-                        </div>
-                      ))}
+                    <div className="flex justify-center gap-2 flex-wrap mb-5 py-3" style={{ borderTop: '1px solid #f5f5f5', borderBottom: '1px solid #f5f5f5' }}>
+                      {match.sets.map((set, i) => {
+                        const setWinner = set.score1 > set.score2 ? 'team1' : 'team2';
+                        const matchWinner = t1SetsWon > t2SetsWon ? 'team1' : 'team2';
+                        const isMatchWinnerSet = setWinner === matchWinner;
+                        return (
+                          <span
+                            key={i}
+                            className="px-3 py-1.5 rounded font-mono"
+                            style={{
+                              background: isMatchWinnerSet ? '#dcfce7' : '#fee2e2',
+                              color: '#111',
+                              fontSize: '0.875rem'
+                            }}
+                          >
+                            <span style={{ fontWeight: set.score1 > set.score2 ? '600' : 'normal' }}>{set.score1}</span>
+                            <span style={{ color: '#ccc', margin: '0 4px', fontWeight: '300' }}>-</span>
+                            <span style={{ fontWeight: set.score2 > set.score1 ? '600' : 'normal' }}>{set.score2}</span>
+                          </span>
+                        );
+                      })}
                     </div>
                   )}
 
+                  {/* Action button */}
                   <button
-                    onClick={() => openScoring(match)}
+                    onClick={() => navigate(`/${sport}/tournament/${id}/match/${match.id}/score`)}
                     className="mono-btn w-full"
                   >
                     {hasScore ? 'Edit Score' : 'Enter Score'}
@@ -360,74 +300,6 @@ export default function GenericSetsTournament() {
         )}
       </div>
 
-      {/* Score Entry Modal */}
-      {scoringMatch && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-6 z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-bold mb-4">Enter Set Scores</h2>
-
-            <div className="text-sm mb-4" style={{ color: '#888' }}>
-              {getTeamName(scoringMatch.team1Id)} vs {getTeamName(scoringMatch.team2Id)}
-            </div>
-
-            <div className="space-y-3 mb-4">
-              {tempSets.map((set, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <span className="text-xs font-medium w-12" style={{ color: '#888' }}>
-                    Set {idx + 1}
-                  </span>
-                  <input
-                    type="number"
-                    value={set.score1}
-                    onChange={(e) => updateSetScore(idx, 'score1', e.target.value)}
-                    className="mono-input flex-1"
-                    placeholder="0"
-                    min="0"
-                  />
-                  <span style={{ color: '#888' }}>-</span>
-                  <input
-                    type="number"
-                    value={set.score2}
-                    onChange={(e) => updateSetScore(idx, 'score2', e.target.value)}
-                    className="mono-input flex-1"
-                    placeholder="0"
-                    min="0"
-                  />
-                  {tempSets.length > 1 && (
-                    <button
-                      onClick={() => removeSet(idx)}
-                      className="text-xs"
-                      style={{ color: '#dc2626' }}
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {scoreError && (
-              <p className="text-xs mb-3" style={{ color: '#dc2626' }}>{scoreError}</p>
-            )}
-
-            <button
-              onClick={addSet}
-              className="mono-btn w-full mb-3"
-            >
-              + Add Set
-            </button>
-
-            <div className="flex gap-3">
-              <button onClick={closeScoring} className="mono-btn flex-1">
-                Cancel
-              </button>
-              <button onClick={saveScore} className="mono-btn-primary flex-1">
-                Save Score
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
