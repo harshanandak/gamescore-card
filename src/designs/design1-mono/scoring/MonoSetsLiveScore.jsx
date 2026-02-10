@@ -5,6 +5,40 @@ import { loadSportTournaments, saveSportTournament } from '../../../utils/storag
 
 const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
+// Haptic feedback helper
+const triggerHaptic = (pattern) => {
+  if ('vibrate' in navigator) {
+    navigator.vibrate(pattern);
+  }
+};
+
+// Confetti helper
+const triggerConfetti = () => {
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (prefersReducedMotion) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'mono-confetti-overlay';
+  document.body.appendChild(overlay);
+
+  const colors = ['#0066ff', '#00cc88', '#ff6b6b', '#ffd93d', '#a569bd'];
+  const confettiCount = 50;
+
+  for (let i = 0; i < confettiCount; i++) {
+    const confetti = document.createElement('div');
+    confetti.className = 'mono-confetti mono-confetti-animate';
+    confetti.style.left = `${Math.random() * 100}%`;
+    confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+    confetti.style.animationDelay = `${Math.random() * 0.5}s`;
+    confetti.style.animationDuration = `${2 + Math.random()}s`;
+    overlay.appendChild(confetti);
+  }
+
+  setTimeout(() => {
+    document.body.removeChild(overlay);
+  }, 3500);
+};
+
 export default function MonoSetsLiveScore() {
   const navigate = useNavigate();
   const { sport, id, matchId } = useParams();
@@ -19,6 +53,10 @@ export default function MonoSetsLiveScore() {
   const [sets, setSets] = useState([{ score1: 0, score2: 0, completed: false }]);
   const [history, setHistory] = useState([]);
   const [hasChanges, setHasChanges] = useState(false);
+
+  // Animation state
+  const [showSetWon, setShowSetWon] = useState(false);
+  const [setWonTeam, setSetWonTeam] = useState('');
 
   // Debounce ref for rapid clicks
   const lastClickRef = useRef(0);
@@ -40,10 +78,17 @@ export default function MonoSetsLiveScore() {
     setMatch(foundMatch);
 
     // Initialize from existing score if editing
-    if (foundMatch.sets?.length > 0) {
+    if (foundMatch.sets?.length > 0 && !foundMatch.draftState) {
       setSets(foundMatch.sets.map(s => ({ ...s, completed: s.completed || false })));
       const lastSetIndex = foundMatch.sets.length - 1;
       setCurrentSet(lastSetIndex);
+    }
+
+    // Restore from draft if exists
+    if (foundMatch.draftState) {
+      setSets(foundMatch.draftState.sets);
+      setCurrentSet(foundMatch.draftState.currentSet);
+      setHistory(foundMatch.draftState.history || []);
     }
   }, [sport, id, matchId]);
 
@@ -81,6 +126,9 @@ export default function MonoSetsLiveScore() {
     // Don't allow scoring on completed sets
     if (sets[currentSet]?.completed) return;
 
+    // Haptic feedback: short pulse on point scored
+    triggerHaptic(50);
+
     // Save to history BEFORE modifying
     setHistory(prev => [...prev, {
       timestamp: Date.now(),
@@ -100,13 +148,27 @@ export default function MonoSetsLiveScore() {
       if (isComplete) {
         newSets[currentSet].completed = true;
 
+        // Haptic feedback: double pulse for set won
+        triggerHaptic([50, 100, 50]);
+
+        // Show set won notification
+        const winningTeam = newSets[currentSet].score1 > newSets[currentSet].score2
+          ? (match.team1Id === tournament.teams[0]?.id ? tournament.teams[0]?.name : tournament.teams.find(t => t.id === match.team1Id)?.name)
+          : (match.team2Id === tournament.teams[0]?.id ? tournament.teams[0]?.name : tournament.teams.find(t => t.id === match.team2Id)?.name);
+
+        setSetWonTeam(winningTeam || `Team ${team}`);
+        setShowSetWon(true);
+        setTimeout(() => setShowSetWon(false), 1500);
+
         // Check if match complete (only count completed sets)
         const t1SetsWon = newSets.filter(s => s.completed && s.score1 > s.score2).length;
         const t2SetsWon = newSets.filter(s => s.completed && s.score2 > s.score1).length;
         const setsToWin = Math.ceil(tournament.format.sets / 2);
 
         if (t1SetsWon >= setsToWin || t2SetsWon >= setsToWin) {
-          // Match complete
+          // Match complete - trigger confetti
+          triggerConfetti();
+          triggerHaptic([100, 100, 100, 100, 100]); // Victory pattern
           return newSets;
         }
 
@@ -129,6 +191,33 @@ export default function MonoSetsLiveScore() {
     setSets(last.sets);
     setCurrentSet(last.currentSet);
     setHistory(prev => prev.slice(0, -1));
+  };
+
+  // Save draft (in-progress match)
+  const saveDraft = () => {
+    const updatedMatches = tournament.matches.map(m =>
+      m.id === matchId
+        ? {
+            ...m,
+            status: 'in-progress',
+            draftState: {
+              currentSet,
+              sets: JSON.parse(JSON.stringify(sets)),
+              history: JSON.parse(JSON.stringify(history.slice(-50))), // Keep last 50 for storage efficiency
+              savedAt: new Date().toISOString(),
+            },
+          }
+        : m
+    );
+
+    saveSportTournament(sportConfig.storageKey, {
+      ...tournament,
+      matches: updatedMatches,
+    });
+
+    setHasChanges(false);
+    alert('Draft saved! You can resume this match later.');
+    navigate(`/${sport}/tournament/${id}`);
   };
 
   // Save match and return
@@ -154,6 +243,7 @@ export default function MonoSetsLiveScore() {
             sets: setsToSave,
             status: isMatchComplete ? 'completed' : 'pending',
             winner: isMatchComplete ? (t1SetsWon > t2SetsWon ? m.team1Id : m.team2Id) : null,
+            draftState: undefined, // Clear draft state when saving final score
           }
         : m
     );
@@ -234,12 +324,32 @@ export default function MonoSetsLiveScore() {
           </span>
         </div>
 
+        {/* ARIA live region for score announcements */}
+        <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="sr-only"
+        >
+          {team1Name}: {sets[currentSet]?.score1 || 0}. {team2Name}: {sets[currentSet]?.score2 || 0}. Set {currentSet + 1} of {tournament?.format?.sets || 0}.
+        </div>
+
         {/* Score cards - side by side */}
         <div className="flex items-stretch gap-4 mb-8" style={{ minHeight: '250px' }}>
           {/* Team 1 Card */}
           <div
+            role="button"
+            tabIndex={isCurrentSetComplete ? -1 : 0}
             className="flex-1 flex flex-col items-center justify-center mono-card"
             onClick={() => !isCurrentSetComplete && addPoint(1)}
+            onKeyDown={(e) => {
+              if (!isCurrentSetComplete && (e.key === 'Enter' || e.key === ' ')) {
+                e.preventDefault();
+                addPoint(1);
+              }
+            }}
+            aria-label={`${team1Name}: ${sets[currentSet]?.score1 || 0} points. ${isCurrentSetComplete ? 'Set complete' : 'Press Enter or click to add point'}`}
+            aria-disabled={isCurrentSetComplete}
             style={{
               padding: '24px 16px',
               cursor: isCurrentSetComplete ? 'default' : 'pointer',
@@ -247,21 +357,31 @@ export default function MonoSetsLiveScore() {
               touchAction: 'manipulation',
             }}
           >
-            <p className="text-xs uppercase tracking-widest mb-4" style={{ color: '#888' }}>
+            <p className="text-xs uppercase tracking-widest mb-4" style={{ color: '#888' }} aria-hidden="true">
               {team1Name}
             </p>
-            <p className="text-6xl font-bold font-mono mono-score" style={{ color: '#111' }}>
+            <p className="text-6xl font-bold font-mono mono-score" style={{ color: '#111' }} aria-hidden="true">
               {sets[currentSet]?.score1 || 0}
             </p>
-            <p className="text-xs mt-4" style={{ color: '#bbb' }}>
+            <p className="text-xs mt-4" style={{ color: '#bbb' }} aria-hidden="true">
               {isCurrentSetComplete ? 'Set complete' : 'Tap to score'}
             </p>
           </div>
 
           {/* Team 2 Card */}
           <div
+            role="button"
+            tabIndex={isCurrentSetComplete ? -1 : 0}
             className="flex-1 flex flex-col items-center justify-center mono-card"
             onClick={() => !isCurrentSetComplete && addPoint(2)}
+            onKeyDown={(e) => {
+              if (!isCurrentSetComplete && (e.key === 'Enter' || e.key === ' ')) {
+                e.preventDefault();
+                addPoint(2);
+              }
+            }}
+            aria-label={`${team2Name}: ${sets[currentSet]?.score2 || 0} points. ${isCurrentSetComplete ? 'Set complete' : 'Press Enter or click to add point'}`}
+            aria-disabled={isCurrentSetComplete}
             style={{
               padding: '24px 16px',
               cursor: isCurrentSetComplete ? 'default' : 'pointer',
@@ -269,13 +389,13 @@ export default function MonoSetsLiveScore() {
               touchAction: 'manipulation',
             }}
           >
-            <p className="text-xs uppercase tracking-widest mb-4" style={{ color: '#888' }}>
+            <p className="text-xs uppercase tracking-widest mb-4" style={{ color: '#888' }} aria-hidden="true">
               {team2Name}
             </p>
-            <p className="text-6xl font-bold font-mono mono-score" style={{ color: '#111' }}>
+            <p className="text-6xl font-bold font-mono mono-score" style={{ color: '#111' }} aria-hidden="true">
               {sets[currentSet]?.score2 || 0}
             </p>
-            <p className="text-xs mt-4" style={{ color: '#bbb' }}>
+            <p className="text-xs mt-4" style={{ color: '#bbb' }} aria-hidden="true">
               {isCurrentSetComplete ? 'Set complete' : 'Tap to score'}
             </p>
           </div>
@@ -319,12 +439,24 @@ export default function MonoSetsLiveScore() {
             <button onClick={handleCancel} className="mono-btn">
               Cancel
             </button>
+            {hasChanges && (
+              <button onClick={saveDraft} className="mono-btn" style={{ borderColor: '#0066ff', color: '#0066ff' }}>
+                Save Draft
+              </button>
+            )}
             <button onClick={saveMatch} className="mono-btn-primary">
               Save & Return
             </button>
           </div>
         </div>
       </div>
+
+      {/* Set Won Notification */}
+      {showSetWon && (
+        <div className="mono-set-won mono-set-won-animate">
+          {setWonTeam} wins Set {currentSet}!
+        </div>
+      )}
     </div>
   );
 }

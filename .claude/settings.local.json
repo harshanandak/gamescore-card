@@ -18,7 +18,17 @@
       "mcp__claude_ai_Parallel_Ai_seach__web_search_preview",
       "Bash(npx convex login:*)",
       "Bash(npx convex init:*)",
-      "Bash(bunx convex dev:*)"
+      "Bash(bunx convex dev:*)",
+      "Bash(taskkill:*)",
+      "Bash(vercel:*)",
+      "Bash(wc:*)",
+      "Bash(find:*)",
+      "Bash(sonar-scanner:*)",
+      "Bash(sonar-scanner.bat:*)",
+      "Bash(where:*)",
+      "Bash(bunx --bun vite build:*)",
+      "Bash(npx vitest:*)",
+      "Bash(ls:*)"
     ]
   }
 }

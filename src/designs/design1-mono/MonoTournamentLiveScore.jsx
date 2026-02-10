@@ -4,6 +4,7 @@ import { getSportById } from '../../models/sportRegistry';
 import MonoSetsLiveScore from './scoring/MonoSetsLiveScore';
 import MonoGoalsLiveScore from './scoring/MonoGoalsLiveScore';
 import MonoCricketLiveScore from './scoring/MonoCricketLiveScore';
+import MonoTennisLiveScore from './scoring/MonoTennisLiveScore';
 
 export default function MonoTournamentLiveScore() {
   const { sport } = useParams();
@@ -11,6 +12,11 @@ export default function MonoTournamentLiveScore() {
   // Cricket uses custom-cricket engine and special handling
   if (sport === 'cricket') {
     return <MonoCricketLiveScore />;
+  }
+
+  // Tennis uses real tennis scoring (0-15-30-40-Game, deuce, tiebreak)
+  if (sport === 'tennis') {
+    return <MonoTennisLiveScore />;
   }
 
   const sportConfig = getSportById(sport);

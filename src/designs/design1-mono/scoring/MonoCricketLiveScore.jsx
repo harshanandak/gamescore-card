@@ -5,6 +5,40 @@ import { ballsToOvers, calculateRunRate } from '../../../utils/cricketCalculatio
 
 const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
+// Haptic feedback helper
+const triggerHaptic = (pattern) => {
+  if ('vibrate' in navigator) {
+    navigator.vibrate(pattern);
+  }
+};
+
+// Confetti helper
+const triggerConfetti = () => {
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (prefersReducedMotion) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'mono-confetti-overlay';
+  document.body.appendChild(overlay);
+
+  const colors = ['#0066ff', '#00cc88', '#ff6b6b', '#ffd93d', '#a569bd'];
+  const confettiCount = 50;
+
+  for (let i = 0; i < confettiCount; i++) {
+    const confetti = document.createElement('div');
+    confetti.className = 'mono-confetti mono-confetti-animate';
+    confetti.style.left = `${Math.random() * 100}%`;
+    confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+    confetti.style.animationDelay = `${Math.random() * 0.5}s`;
+    confetti.style.animationDuration = `${2 + Math.random()}s`;
+    overlay.appendChild(confetti);
+  }
+
+  setTimeout(() => {
+    document.body.removeChild(overlay);
+  }, 3500);
+};
+
 export default function MonoCricketLiveScore() {
   const navigate = useNavigate();
   const { id, matchId } = useParams();
@@ -39,7 +73,7 @@ export default function MonoCricketLiveScore() {
     setMatch(foundMatch);
 
     // Initialize from existing score if editing
-    if (foundMatch.team1Score) {
+    if (foundMatch.team1Score && !foundMatch.draftState) {
       setScores({
         team1: { ...foundMatch.team1Score, wickets: foundMatch.team1Score.wickets || 0 },
         team2: { ...foundMatch.team2Score, wickets: foundMatch.team2Score.wickets || 0 },
@@ -49,6 +83,14 @@ export default function MonoCricketLiveScore() {
         setInnings(2);
         setBattingTeam(2);
       }
+    }
+
+    // Restore from draft if exists
+    if (foundMatch.draftState) {
+      setScores(foundMatch.draftState.scores);
+      setBattingTeam(foundMatch.draftState.battingTeam);
+      setInnings(foundMatch.draftState.innings);
+      setHistory(foundMatch.draftState.history || []);
     }
   }, [id, matchId]);
 
@@ -62,6 +104,13 @@ export default function MonoCricketLiveScore() {
     const now = Date.now();
     if (now - lastClickRef.current < 150) return;
     lastClickRef.current = now;
+
+    // Haptic feedback: stronger pulse for 4s and 6s
+    if (runs === 4 || runs === 6) {
+      triggerHaptic([50, 50, 50]); // Triple pulse for boundary
+    } else {
+      triggerHaptic(50); // Single pulse for normal runs
+    }
 
     // Save to history
     setHistory(prev => [...prev, {
@@ -111,6 +160,9 @@ export default function MonoCricketLiveScore() {
     const now = Date.now();
     if (now - lastClickRef.current < 150) return;
     lastClickRef.current = now;
+
+    // Haptic feedback: double pulse for wicket
+    triggerHaptic([80, 80, 80]);
 
     // Save to history
     setHistory(prev => [...prev, {
@@ -162,6 +214,9 @@ export default function MonoCricketLiveScore() {
     if (now - lastClickRef.current < 150) return;
     lastClickRef.current = now;
 
+    // Haptic feedback: short pulse for extra
+    triggerHaptic(30);
+
     // Save to history
     setHistory(prev => [...prev, {
       timestamp: Date.now(),
@@ -191,6 +246,34 @@ export default function MonoCricketLiveScore() {
     setBattingTeam(last.battingTeam);
     setInnings(last.innings);
     setHistory(prev => prev.slice(0, -1));
+  };
+
+  // Save draft (in-progress match)
+  const saveDraft = () => {
+    const updatedMatches = tournament.matches.map(m =>
+      m.id === matchId
+        ? {
+            ...m,
+            status: 'in-progress',
+            draftState: {
+              scores: JSON.parse(JSON.stringify(scores)),
+              battingTeam,
+              innings,
+              history: JSON.parse(JSON.stringify(history.slice(-50))),
+              savedAt: new Date().toISOString(),
+            },
+          }
+        : m
+    );
+
+    saveCricketTournament({
+      ...tournament,
+      matches: updatedMatches,
+    });
+
+    setHasChanges(false);
+    alert('Draft saved! You can resume this match later.');
+    navigate(`/cricket/tournament/${id}`);
   };
 
   // Keyboard shortcuts (skip on touch-only devices)
@@ -233,6 +316,12 @@ export default function MonoCricketLiveScore() {
   const saveMatch = () => {
     if (!tournament || !match) return;
 
+    // Trigger celebration for completed match
+    if (scores.team1.balls > 0 || scores.team2.balls > 0) {
+      triggerConfetti();
+      triggerHaptic([100, 100, 100, 100, 100]); // Victory pattern
+    }
+
     const updatedMatches = tournament.matches.map(m =>
       m.id === matchId
         ? {
@@ -250,6 +339,7 @@ export default function MonoCricketLiveScore() {
               allOut: scores.team2.allOut,
             },
             status: 'completed',
+            draftState: undefined, // Clear draft state
           }
         : m
     );
@@ -259,7 +349,10 @@ export default function MonoCricketLiveScore() {
       matches: updatedMatches,
     });
 
-    navigate(`/cricket/tournament/${id}`);
+    // Delay navigation slightly to show confetti
+    setTimeout(() => {
+      navigate(`/cricket/tournament/${id}`);
+    }, 300);
   };
 
   // Cancel
@@ -447,6 +540,11 @@ export default function MonoCricketLiveScore() {
             <button onClick={handleCancel} className="mono-btn">
               Cancel
             </button>
+            {hasChanges && (
+              <button onClick={saveDraft} className="mono-btn" style={{ borderColor: '#0066ff', color: '#0066ff' }}>
+                Save Draft
+              </button>
+            )}
             <button onClick={saveMatch} className="mono-btn-primary">
               Save & Return
             </button>

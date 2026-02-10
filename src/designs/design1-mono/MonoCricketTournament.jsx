@@ -142,7 +142,10 @@ export default function MonoCricketTournament() {
                   <div
                     onClick={() => navigate(`/cricket/tournament/${id}/match/${match.id}/score`)}
                     className="cursor-pointer"
-                    style={{ padding: '16px 20px' }}
+                    style={{
+                      padding: '16px 20px',
+                      background: match.status === 'in-progress' ? '#f0f9ff' : 'transparent',
+                    }}
                   >
                     {isComplete ? (
                       <div className="flex items-center">
@@ -173,7 +176,11 @@ export default function MonoCricketTournament() {
                     ) : (
                       <div className="flex items-center justify-between">
                         <span className="text-sm" style={{ color: '#111' }}>{t1Name}</span>
-                        <span className="text-xs" style={{ color: '#ccc' }}>vs</span>
+                        {match.status === 'in-progress' ? (
+                          <span className="text-xs font-medium" style={{ color: '#0066ff' }}>▶ Resume</span>
+                        ) : (
+                          <span className="text-xs" style={{ color: '#ccc' }}>vs</span>
+                        )}
                         <span className="text-sm" style={{ color: '#111' }}>{t2Name}</span>
                       </div>
                     )}

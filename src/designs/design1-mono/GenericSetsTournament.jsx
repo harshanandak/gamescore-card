@@ -221,9 +221,11 @@ export default function GenericSetsTournament() {
                   {/* Action button */}
                   <button
                     onClick={() => navigate(`/${sport}/tournament/${id}/match/${match.id}/score`)}
-                    className="mono-btn w-full"
+                    className={match.status === 'in-progress' ? 'mono-btn-primary w-full' : 'mono-btn w-full'}
                   >
-                    {hasScore ? 'Edit Score' : 'Enter Score'}
+                    {match.status === 'in-progress'
+                      ? '▶ Resume Match'
+                      : hasScore ? 'Edit Score' : 'Enter Score'}
                   </button>
                 </div>
               );
