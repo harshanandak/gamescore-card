@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { sportRegistry } from '../../../models/sportRegistry';
-import { getTournament, updateTournament } from '../../../utils/storage';
+import { getSportById } from '../../../models/sportRegistry';
+import { loadSportTournaments, saveSportTournament } from '../../../utils/storage';
 
 // Haptic feedback helper
 const triggerHaptic = (pattern) => {
@@ -58,17 +58,13 @@ const showSetWon = (teamName, setNumber) => {
 
 export default function MonoTennisLiveScore() {
   const navigate = useNavigate();
-  const { matchId } = useParams();
+  const { sport, id, matchId } = useParams();
   const lastClickRef = useRef(0);
 
-  const tournament = getTournament();
-  const match = tournament?.matches?.find(m => m.id === matchId);
-  const sportConfig = sportRegistry.find(s => s.id === tournament?.sportId);
-
-  const team1 = tournament?.teams?.find(t => t.id === match?.team1Id);
-  const team2 = tournament?.teams?.find(t => t.id === match?.team2Id);
-  const team1Name = team1?.name || 'Team 1';
-  const team2Name = team2?.name || 'Team 2';
+  // Core state
+  const [sportConfig, setSportConfig] = useState(null);
+  const [tournament, setTournament] = useState(null);
+  const [match, setMatch] = useState(null);
 
   // Tennis state structure
   const initializeSets = () => {
@@ -109,6 +105,43 @@ export default function MonoTennisLiveScore() {
   });
 
   const [hasChanges, setHasChanges] = useState(false);
+
+  // Load tournament and match data
+  useEffect(() => {
+    const config = getSportById(sport);
+    if (!config) return;
+
+    const tournaments = loadSportTournaments(config.storageKey);
+    const found = tournaments.find(t => t.id === Number(id));
+    if (!found) return;
+
+    const foundMatch = found.matches.find(m => m.id === matchId);
+    if (!foundMatch) return;
+
+    setSportConfig(config);
+    setTournament(found);
+    setMatch(foundMatch);
+
+    // Initialize from existing score if editing
+    if (foundMatch.sets?.length > 0 && !foundMatch.draftState) {
+      setSets(foundMatch.sets);
+      const lastSetIndex = foundMatch.sets.findIndex(s => !s.completed);
+      setCurrentSet(lastSetIndex >= 0 ? lastSetIndex : foundMatch.sets.length - 1);
+    }
+
+    // Restore from draft if exists
+    if (foundMatch.draftState) {
+      setSets(foundMatch.draftState.sets);
+      setCurrentSet(foundMatch.draftState.currentSet);
+      setHistory(foundMatch.draftState.history || []);
+    }
+  }, [sport, id, matchId]);
+
+  // Get team names
+  const team1 = tournament?.teams?.find(t => t.id === match?.team1Id);
+  const team2 = tournament?.teams?.find(t => t.id === match?.team2Id);
+  const team1Name = team1?.name || 'Team 1';
+  const team2Name = team2?.name || 'Team 2';
 
   // Check if set is complete
   const isSetComplete = (set) => {
@@ -350,7 +383,7 @@ export default function MonoTennisLiveScore() {
         : m
     );
 
-    updateTournament({ ...tournament, matches: updatedMatches });
+    saveSportTournament(sportConfig.storageKey, { ...tournament, matches: updatedMatches });
     alert('Draft saved! You can resume this match later.');
     navigate(`/design1/${tournament.sportId}/tournament`);
   };
@@ -396,7 +429,7 @@ export default function MonoTennisLiveScore() {
         : m
     );
 
-    updateTournament({ ...tournament, matches: updatedMatches });
+    saveSportTournament(sportConfig.storageKey, { ...tournament, matches: updatedMatches });
     navigate(`/design1/${tournament.sportId}/tournament`);
   };
 
