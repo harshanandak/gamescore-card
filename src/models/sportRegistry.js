@@ -370,6 +370,23 @@ export const SPORT_REGISTRY = {
     engine: 'custom-cricket',
     desc: 'Overs, wickets, NRR',
     storageKey: 'gamescore_cricket',
+    config: {
+      scoringUnit: 'run',
+      pointIncrement: 1,
+      drawAllowed: false,
+      winPoints: 2,
+      lossPoints: 0,
+      quickButtons: [
+        { label: '0', value: 0 },
+        { label: '1', value: 1 },
+        { label: '2', value: 2 },
+        { label: '3', value: 3 },
+        { label: '4', value: 4 },
+        { label: '6', value: 6 },
+        { label: 'W', value: 0, isWicket: true },
+      ],
+    },
+    standingsColumns: ['P', 'W', 'L', 'NR', 'NRR', 'Pts'],
     features: [
       'Custom overs (1-50)',
       'NRR points table',

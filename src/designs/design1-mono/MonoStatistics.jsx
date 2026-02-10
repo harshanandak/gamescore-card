@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { loadCricketTournaments, loadVolleyballTournaments, loadData } from '../../utils/storage';
+import { loadSportTournaments, loadData } from '../../utils/storage';
+import { getSportsList } from '../../models/sportRegistry';
 
 const QM_KEY = 'gamescore_quickmatches';
 
@@ -8,46 +9,59 @@ export default function MonoStatistics() {
   const navigate = useNavigate();
   const [visible, setVisible] = useState(false);
   const [tab, setTab] = useState('overview');
-  const [cricketData, setCricketData] = useState({ tournaments: 0, matches: 0, teams: new Set() });
-  const [volleyballData, setVolleyballData] = useState({ tournaments: 0, matches: 0, teams: new Set() });
+  const [sportsData, setSportsData] = useState({});
   const [quickMatches, setQuickMatches] = useState([]);
 
   useEffect(() => {
     requestAnimationFrame(() => setVisible(true));
 
-    const cricket = loadCricketTournaments();
-    const volleyball = loadVolleyballTournaments();
     const qm = loadData(QM_KEY, []);
     setQuickMatches(qm);
 
-    // Cricket stats
-    let cMatches = 0;
-    const cTeams = new Set();
-    cricket.forEach(t => {
-      cMatches += t.matches?.filter(m => m.status === 'completed' || m.team1Score).length || 0;
-      t.teams?.forEach(team => cTeams.add(team.name));
-    });
-    setCricketData({ tournaments: cricket.length, matches: cMatches, teams: cTeams });
+    // Load stats for ALL sports
+    const allSports = getSportsList();
+    const dataMap = {};
 
-    // Volleyball stats
-    let vMatches = 0;
-    const vTeams = new Set();
-    volleyball.forEach(t => {
-      vMatches += t.matches?.filter(m => m.score1 !== null && m.score1 !== undefined).length || 0;
-      t.teams?.forEach(team => vTeams.add(team.name));
+    allSports.forEach(sport => {
+      const tournaments = loadSportTournaments(sport.storageKey);
+      let matches = 0;
+      const teams = new Set();
+
+      tournaments.forEach(t => {
+        // Count matches based on sport type
+        if (sport.engine === 'custom-cricket') {
+          matches += t.matches?.filter(m => m.status === 'completed' || m.team1Score).length || 0;
+        } else {
+          matches += t.matches?.filter(m => m.score1 !== null && m.score1 !== undefined).length || 0;
+        }
+        t.teams?.forEach(team => teams.add(team.name));
+      });
+
+      dataMap[sport.id] = {
+        sport,
+        tournaments: tournaments.length,
+        matches,
+        teams,
+        tournamentsRaw: tournaments,
+      };
     });
-    setVolleyballData({ tournaments: volleyball.length, matches: vMatches, teams: vTeams });
+
+    setSportsData(dataMap);
   }, []);
 
-  const totalTournaments = cricketData.tournaments + volleyballData.tournaments;
-  const totalMatches = cricketData.matches + volleyballData.matches + quickMatches.length;
-  const totalTeams = new Set([...cricketData.teams, ...volleyballData.teams]).size;
+  // Calculate totals
+  const totalTournaments = Object.values(sportsData).reduce((sum, d) => sum + d.tournaments, 0);
+  const totalMatches = Object.values(sportsData).reduce((sum, d) => sum + d.matches, 0) + quickMatches.length;
+  const allTeams = new Set();
+  Object.values(sportsData).forEach(d => d.teams.forEach(t => allTeams.add(t)));
+  const totalTeams = allTeams.size;
 
+  // Build tabs dynamically - only show sports with data
+  const sportsWithData = Object.values(sportsData).filter(d => d.tournaments > 0);
   const tabs = [
     { id: 'overview', label: 'Overview' },
-    { id: 'cricket', label: 'Cricket' },
-    { id: 'volleyball', label: 'Volleyball' },
-    { id: 'quick', label: 'Quick' },
+    ...sportsWithData.map(d => ({ id: d.sport.id, label: d.sport.name })),
+    ...(quickMatches.length > 0 ? [{ id: 'quick', label: 'Quick' }] : []),
   ];
 
   return (
@@ -93,72 +107,61 @@ export default function MonoStatistics() {
             <hr className="mono-divider mb-6" />
 
             <div className="flex flex-col gap-3">
-              <div className="mono-card flex items-center justify-between" style={{ padding: '16px 20px' }}>
-                <div className="flex items-center gap-3">
-                  <span className="text-xl">{'\u{1F3CF}'}</span>
-                  <div>
-                    <p className="text-sm font-medium" style={{ color: '#111' }}>Cricket</p>
-                    <p className="text-xs" style={{ color: '#888' }}>
-                      {cricketData.tournaments} tournaments &middot; {cricketData.matches} matches
-                    </p>
+              {/* Show all sports with data */}
+              {sportsWithData.map(sportData => (
+                <div key={sportData.sport.id} className="mono-card flex items-center justify-between" style={{ padding: '16px 20px' }}>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">{sportData.sport.icon}</span>
+                    <div>
+                      <p className="text-sm font-medium" style={{ color: '#111' }}>{sportData.sport.name}</p>
+                      <p className="text-xs" style={{ color: '#888' }}>
+                        {sportData.tournaments} tournament{sportData.tournaments > 1 ? 's' : ''} &middot; {sportData.matches} match{sportData.matches !== 1 ? 'es' : ''}
+                      </p>
+                    </div>
                   </div>
+                  <span className="font-mono text-sm" style={{ color: '#888' }}>
+                    {sportData.teams.size} team{sportData.teams.size !== 1 ? 's' : ''}
+                  </span>
                 </div>
-                <span className="font-mono text-sm" style={{ color: '#888' }}>
-                  {cricketData.teams.size} teams
-                </span>
-              </div>
+              ))}
 
-              <div className="mono-card flex items-center justify-between" style={{ padding: '16px 20px' }}>
-                <div className="flex items-center gap-3">
-                  <span className="text-xl">{'\u{1F3D0}'}</span>
-                  <div>
-                    <p className="text-sm font-medium" style={{ color: '#111' }}>Volleyball</p>
-                    <p className="text-xs" style={{ color: '#888' }}>
-                      {volleyballData.tournaments} tournaments &middot; {volleyballData.matches} matches
-                    </p>
+              {/* Quick matches */}
+              {quickMatches.length > 0 && (
+                <div className="mono-card flex items-center justify-between" style={{ padding: '16px 20px' }}>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">⚡</span>
+                    <div>
+                      <p className="text-sm font-medium" style={{ color: '#111' }}>Quick Matches</p>
+                      <p className="text-xs" style={{ color: '#888' }}>
+                        {quickMatches.length} match{quickMatches.length !== 1 ? 'es' : ''} played
+                      </p>
+                    </div>
                   </div>
                 </div>
-                <span className="font-mono text-sm" style={{ color: '#888' }}>
-                  {volleyballData.teams.size} teams
-                </span>
-              </div>
+              )}
 
-              <div className="mono-card flex items-center justify-between" style={{ padding: '16px 20px' }}>
-                <div className="flex items-center gap-3">
-                  <span className="text-xl">{'\u26A1'}</span>
-                  <div>
-                    <p className="text-sm font-medium" style={{ color: '#111' }}>Quick Matches</p>
-                    <p className="text-xs" style={{ color: '#888' }}>
-                      {quickMatches.length} matches played
-                    </p>
-                  </div>
-                </div>
-              </div>
+              {/* Empty state if no data at all */}
+              {sportsWithData.length === 0 && quickMatches.length === 0 && (
+                <EmptyState icon="📊" label="No game data yet. Start playing to see statistics!" />
+              )}
             </div>
           </div>
         )}
 
-        {/* Cricket */}
-        {tab === 'cricket' && (
-          <div>
-            {cricketData.tournaments === 0 ? (
-              <EmptyState icon={'\u{1F3CF}'} label="No cricket data yet" />
-            ) : (
-              <TeamStatsTable sport="cricket" />
-            )}
-          </div>
-        )}
-
-        {/* Volleyball */}
-        {tab === 'volleyball' && (
-          <div>
-            {volleyballData.tournaments === 0 ? (
-              <EmptyState icon={'\u{1F3D0}'} label="No volleyball data yet" />
-            ) : (
-              <TeamStatsTable sport="volleyball" />
-            )}
-          </div>
-        )}
+        {/* Dynamic sport tabs */}
+        {sportsWithData.map(sportData => (
+          tab === sportData.sport.id && (
+            <div key={sportData.sport.id}>
+              <TeamStatsTable
+                sportId={sportData.sport.id}
+                sportName={sportData.sport.name}
+                sportIcon={sportData.sport.icon}
+                tournaments={sportData.tournamentsRaw}
+                engine={sportData.sport.engine}
+              />
+            </div>
+          )
+        ))}
 
         {/* Quick Matches */}
         {tab === 'quick' && (
@@ -215,14 +218,10 @@ function EmptyState({ icon, label }) {
   );
 }
 
-function TeamStatsTable({ sport }) {
+function TeamStatsTable({ sportId, sportName, sportIcon, tournaments, engine }) {
   const [data, setData] = useState([]);
 
   useEffect(() => {
-    const tournaments = sport === 'cricket'
-      ? loadCricketTournaments()
-      : loadVolleyballTournaments();
-
     const teamMap = {};
 
     tournaments.forEach(t => {
@@ -233,7 +232,8 @@ function TeamStatsTable({ sport }) {
       });
 
       t.matches?.forEach(match => {
-        if (sport === 'cricket') {
+        if (engine === 'custom-cricket') {
+          // Cricket scoring
           if (match.status !== 'completed' && !match.team1Score) return;
           const t1 = t.teams?.find(te => te.id === match.team1Id)?.name;
           const t2 = t.teams?.find(te => te.id === match.team2Id)?.name;
@@ -247,6 +247,7 @@ function TeamStatsTable({ sport }) {
           if (s1 > s2) { teamMap[t1].won++; teamMap[t2].lost++; }
           else if (s2 > s1) { teamMap[t2].won++; teamMap[t1].lost++; }
         } else {
+          // Sets/Goals scoring
           if (match.score1 === null || match.score1 === undefined) return;
           const idx1 = match.team1Id ?? match.team1;
           const idx2 = match.team2Id ?? match.team2;
@@ -263,9 +264,9 @@ function TeamStatsTable({ sport }) {
     });
 
     setData(Object.values(teamMap).sort((a, b) => b.won - a.won));
-  }, [sport]);
+  }, [tournaments, engine]);
 
-  if (data.length === 0) return <EmptyState icon={sport === 'cricket' ? '\u{1F3CF}' : '\u{1F3D0}'} label="No team data" />;
+  if (data.length === 0) return <EmptyState icon={sportIcon} label={`No ${sportName.toLowerCase()} data yet`} />;
 
   return (
     <div className="mono-card" style={{ padding: 0, overflow: 'hidden' }}>

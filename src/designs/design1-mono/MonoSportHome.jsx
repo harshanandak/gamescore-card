@@ -73,16 +73,17 @@ export default function MonoSportHome() {
           <div className="flex items-center gap-3">
             <button
               onClick={switchLayout}
-              className="text-xs bg-transparent border-none cursor-pointer font-swiss"
-              style={{ color: '#0066ff' }}
+              className="mono-btn flex items-center gap-2.5"
+              style={{ fontSize: '0.9375rem', padding: '10px 18px', fontWeight: '500' }}
               title={layout === 'tabs' ? 'Switch to grid view' : 'Switch to tabs view'}
             >
-              {layout === 'tabs' ? '⊞' : '☰'}
+              <span style={{ fontSize: '1.125rem' }}>{layout === 'tabs' ? '⊞' : '☰'}</span>
+              <span>View: {layout === 'tabs' ? 'Grid' : 'Tabs'}</span>
             </button>
             <button
               onClick={() => navigate('/statistics')}
-              className="text-sm bg-transparent border-none cursor-pointer font-swiss"
-              style={{ color: '#888' }}
+              className="mono-btn"
+              style={{ fontSize: '0.9375rem', padding: '10px 18px' }}
             >
               Statistics
             </button>
@@ -211,22 +212,6 @@ export default function MonoSportHome() {
               ))}
             </>
           )}
-        </div>
-
-        <hr className="mono-divider" />
-
-        {/* More games link */}
-        <div className="mt-8 flex flex-col items-center" style={{ minHeight: '10vh' }}>
-          <button
-            onClick={() => navigate('/setup')}
-            className="text-sm bg-transparent border-none cursor-pointer font-swiss"
-            style={{ color: '#0066ff' }}
-          >
-            Other games (generic scorer)
-          </button>
-          <p className="text-xs mt-2" style={{ color: '#bbb' }}>
-            Universal scorekeeper for any game
-          </p>
         </div>
       </div>
 

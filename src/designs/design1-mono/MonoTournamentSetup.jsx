@@ -225,14 +225,14 @@ export default function MonoTournamentSetup() {
                   Format
                 </label>
                 <div className="flex gap-2 flex-wrap">
-                  {sportConfig.config.setFormats.map((setFormat, idx) => (
+                  {sportConfig.config.setFormats.map((formatOption, idx) => (
                     <button
                       key={idx}
-                      onClick={() => setFormat({ sets: setFormat.sets, points: sportConfig.config.pointsPerSet })}
-                      className={format.sets === setFormat.sets ? 'mono-btn-primary' : 'mono-btn'}
+                      onClick={() => setFormat({ sets: formatOption.sets, points: sportConfig.config.pointsPerSet })}
+                      className={format.sets === formatOption.sets ? 'mono-btn-primary' : 'mono-btn'}
                       style={{ padding: '8px 16px', fontSize: '0.8125rem' }}
                     >
-                      {setFormat.label}
+                      {formatOption.label}
                     </button>
                   ))}
                 </div>
