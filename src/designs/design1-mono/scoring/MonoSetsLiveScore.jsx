@@ -114,7 +114,8 @@ export default function MonoSetsLiveScore() {
 
     // Best-of format
     const { pointsPerSet, deciderPoints } = sportConfig.config;
-    const isDecider = currentSet === (tournament.format.sets - 1);
+    const totalSets = tournament.format.sets || 1;
+    const isDecider = totalSets > 1 && currentSet === (totalSets - 1);
     const target = isDecider && deciderPoints ? deciderPoints : (tournament.format.points || pointsPerSet);
 
     // Must reach target
@@ -187,7 +188,7 @@ export default function MonoSetsLiveScore() {
         // Best-of format: check if match complete
         const t1SetsWon = newSets.filter(s => s.completed && s.score1 > s.score2).length;
         const t2SetsWon = newSets.filter(s => s.completed && s.score2 > s.score1).length;
-        const setsToWin = Math.ceil(tournament.format.sets / 2);
+        const setsToWin = Math.ceil((tournament.format.sets || 1) / 2);
 
         if (t1SetsWon >= setsToWin || t2SetsWon >= setsToWin) {
           // Match complete - trigger confetti
@@ -197,7 +198,7 @@ export default function MonoSetsLiveScore() {
         }
 
         // Start next set
-        if (currentSet < tournament.format.sets - 1) {
+        if (currentSet < (tournament.format.sets || 1) - 1) {
           newSets.push({ score1: 0, score2: 0, completed: false });
           setCurrentSet(prev => prev + 1);
         }
@@ -262,7 +263,7 @@ export default function MonoSetsLiveScore() {
       // Single-set format: match is complete when the one set is done
       isMatchComplete = completedSets.length > 0;
     } else {
-      const setsToWin = Math.ceil(tournament.format.sets / 2);
+      const setsToWin = Math.ceil((tournament.format.sets || 1) / 2);
       isMatchComplete = t1SetsWon >= setsToWin || t2SetsWon >= setsToWin;
     }
 
@@ -339,7 +340,8 @@ export default function MonoSetsLiveScore() {
 
   const { pointsPerSet, deciderPoints, winBy } = sportConfig.config;
   const formatType = tournament.format.type || 'best-of';
-  const isDeciderSet = currentSet === (tournament.format.sets - 1);
+  const totalSetsDisplay = tournament.format.sets || 1;
+  const isDeciderSet = totalSetsDisplay > 1 && currentSet === (totalSetsDisplay - 1);
   const targetPoints = formatType === 'single'
     ? tournament.format.points
     : (isDeciderSet && deciderPoints ? deciderPoints : (tournament.format.points || pointsPerSet));
@@ -358,7 +360,7 @@ export default function MonoSetsLiveScore() {
             ← Back
           </button>
           <span className={`mono-badge ${isCurrentSetComplete ? 'mono-badge-final' : 'mono-badge-live'}`}>
-            {formatType === 'single' ? 'Single Set' : `Set ${currentSet + 1} of ${tournament.format.sets}`}
+            {formatType === 'single' ? 'Single Set' : `Set ${currentSet + 1} of ${tournament.format.sets || 1}`}
           </span>
         </div>
 
@@ -369,7 +371,7 @@ export default function MonoSetsLiveScore() {
           aria-atomic="true"
           className="sr-only"
         >
-          {team1Name}: {sets[currentSet]?.score1 || 0}. {team2Name}: {sets[currentSet]?.score2 || 0}. Set {currentSet + 1} of {tournament?.format?.sets || 0}.
+          {team1Name}: {sets[currentSet]?.score1 || 0}. {team2Name}: {sets[currentSet]?.score2 || 0}. Set {currentSet + 1} of {tournament?.format?.sets || 1}.
         </div>
 
         {/* Score cards - side by side */}

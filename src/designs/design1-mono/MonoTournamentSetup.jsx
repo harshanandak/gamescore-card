@@ -557,7 +557,7 @@ export default function MonoTournamentSetup() {
                     Best-of
                   </button>
                   <button
-                    onClick={() => setFormat({ type: 'single', points: 15 })}
+                    onClick={() => setFormat({ type: 'single', sets: 1, points: 15 })}
                     className={format.type === 'single' ? 'mono-btn-primary' : 'mono-btn'}
                     style={{ padding: '8px 16px', fontSize: '0.8125rem', flex: 1 }}
                   >
