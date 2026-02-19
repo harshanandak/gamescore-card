@@ -31,7 +31,7 @@ export default function GenericSetsTournament() {
         if (formatType === 'single') {
           isComplete = completedSets.length > 0;
         } else {
-          const setsToWin = Math.ceil((found.format?.sets || 3) / 2);
+          const setsToWin = Math.ceil((found.format?.sets || 1) / 2);
           isComplete = t1SetsWon >= setsToWin || t2SetsWon >= setsToWin;
         }
         if (isComplete && m.status !== 'completed') {

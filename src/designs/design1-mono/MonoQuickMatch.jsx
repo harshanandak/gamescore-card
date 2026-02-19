@@ -262,7 +262,8 @@ export default function MonoQuickMatch() {
 
         // Check if current set is complete
         const { deciderPoints, winBy } = sportConfig.config;
-        const isDecider = currentSet === format.sets - 1;
+        const totalSets = format.sets || 1;
+        const isDecider = totalSets > 1 && currentSet === (totalSets - 1);
         const target = isDecider && deciderPoints ? deciderPoints : (format.points || 25);
         const s1 = newSets[currentSet].score1;
         const s2 = newSets[currentSet].score2;
@@ -275,7 +276,7 @@ export default function MonoQuickMatch() {
           // Count sets won
           const t1SetsWon = newSets.filter(s => s.completed && s.score1 > s.score2).length;
           const t2SetsWon = newSets.filter(s => s.completed && s.score2 > s.score1).length;
-          const setsToWin = Math.ceil(format.sets / 2);
+          const setsToWin = Math.ceil((format.sets || 1) / 2);
 
           // Check if match complete
           if (t1SetsWon >= setsToWin || t2SetsWon >= setsToWin) {
@@ -1025,7 +1026,7 @@ export default function MonoQuickMatch() {
             </button>
             <span className="text-sm font-mono" style={{ color: '#888' }}>{timer.formatted}</span>
             <span className="mono-badge mono-badge-live">
-              {format.type === 'best-of' ? `Set ${currentSet + 1} of ${format.sets}` : `First to ${format.target}`}
+              {format.type === 'best-of' ? `Set ${currentSet + 1} of ${format.sets || 1}` : `First to ${format.target}`}
             </span>
           </div>
 
