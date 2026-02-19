@@ -1,4 +1,5 @@
 // LocalStorage utility for persistent data
+import { migrateTournaments } from './formatMigration';
 
 const STORAGE_KEYS = {
   TOURNAMENTS: 'gamescore_tournaments',
@@ -149,7 +150,18 @@ export const saveCricketTournament = (tournamentData) => {
 };
 
 export const loadCricketTournaments = () => {
-  return loadData(STORAGE_KEYS.CRICKET_DATA, []);
+  const tournaments = loadData(STORAGE_KEYS.CRICKET_DATA, []);
+  const migratedTournaments = migrateTournaments(tournaments);
+
+  // Save migrated data if needed
+  const needsSave = migratedTournaments.some((t, i) =>
+    t.format?.formatMode && !tournaments[i]?.format?.formatMode
+  );
+  if (needsSave) {
+    saveData(STORAGE_KEYS.CRICKET_DATA, migratedTournaments);
+  }
+
+  return migratedTournaments;
 };
 
 export const deleteCricketTournament = (tournamentId) => {
@@ -173,7 +185,18 @@ export const saveVolleyballTournament = (tournamentData) => {
 };
 
 export const loadVolleyballTournaments = () => {
-  return loadData(STORAGE_KEYS.VOLLEYBALL_DATA, []);
+  const tournaments = loadData(STORAGE_KEYS.VOLLEYBALL_DATA, []);
+  const migratedTournaments = migrateTournaments(tournaments);
+
+  // Save migrated data if needed
+  const needsSave = migratedTournaments.some((t, i) =>
+    t.format?.formatMode && !tournaments[i]?.format?.formatMode
+  );
+  if (needsSave) {
+    saveData(STORAGE_KEYS.VOLLEYBALL_DATA, migratedTournaments);
+  }
+
+  return migratedTournaments;
 };
 
 export const deleteVolleyballTournament = (tournamentId) => {
@@ -208,7 +231,21 @@ export const saveSportTournament = (storageKey, tournamentData) => {
 };
 
 export const loadSportTournaments = (storageKey) => {
-  return loadData(storageKey, []);
+  const tournaments = loadData(storageKey, []);
+
+  // Apply format migration for backward compatibility
+  const migratedTournaments = migrateTournaments(tournaments);
+
+  // If any tournament was migrated, save the updated data back
+  const needsSave = migratedTournaments.some((t, i) =>
+    t.format?.formatMode && !tournaments[i]?.format?.formatMode
+  );
+
+  if (needsSave) {
+    saveData(storageKey, migratedTournaments);
+  }
+
+  return migratedTournaments;
 };
 
 export const deleteSportTournament = (storageKey, tournamentId) => {

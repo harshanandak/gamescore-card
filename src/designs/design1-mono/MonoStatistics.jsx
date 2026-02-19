@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { loadSportTournaments, loadData } from '../../utils/storage';
+import { loadSportTournaments, loadData, saveData } from '../../utils/storage';
 import { getSportsList } from '../../models/sportRegistry';
 
 const QM_KEY = 'gamescore_quickmatches';
@@ -16,6 +16,7 @@ export default function MonoStatistics() {
     requestAnimationFrame(() => setVisible(true));
 
     const qm = loadData(QM_KEY, []);
+    qm.sort((a, b) => new Date(b.date) - new Date(a.date));
     setQuickMatches(qm);
 
     // Load stats for ALL sports
@@ -48,6 +49,17 @@ export default function MonoStatistics() {
 
     setSportsData(dataMap);
   }, []);
+
+  const deleteQuickMatch = (id) => {
+    const updated = quickMatches.filter(qm => qm.id !== id);
+    setQuickMatches(updated);
+    saveData(QM_KEY, updated);
+  };
+
+  const clearAllQuickMatches = () => {
+    setQuickMatches([]);
+    saveData(QM_KEY, []);
+  };
 
   // Calculate totals
   const totalTournaments = Object.values(sportsData).reduce((sum, d) => sum + d.tournaments, 0);
@@ -172,29 +184,55 @@ export default function MonoStatistics() {
             {quickMatches.length === 0 ? (
               <EmptyState icon={'\u26A1'} label="No quick matches yet" />
             ) : (
-              <div className="flex flex-col gap-2">
-                {quickMatches.map(qm => (
-                  <div key={qm.id} className="mono-card" style={{ padding: '12px 16px' }}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm" style={{ color: '#111' }}>
-                        {qm.team1} vs {qm.team2}
-                      </span>
-                      <span className="text-xs font-mono" style={{ color: '#888' }}>
-                        {qm.score1 !== undefined
-                          ? `${qm.score1}-${qm.score2}`
-                          : `${qm.team1Score?.runs}/${qm.team1Score?.wickets} vs ${qm.team2Score?.runs}/${qm.team2Score?.wickets}`
-                        }
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between mt-1">
-                      <span className="text-xs" style={{ color: '#0066ff' }}>{qm.winner}</span>
-                      <span className="text-xs" style={{ color: '#bbb' }}>
-                        {new Date(qm.date).toLocaleDateString()}
-                      </span>
-                    </div>
+              <>
+                {quickMatches.length > 1 && (
+                  <div className="flex justify-end mb-3">
+                    <button
+                      onClick={clearAllQuickMatches}
+                      className="bg-transparent border-none cursor-pointer font-swiss text-xs"
+                      style={{ color: '#dc2626' }}
+                    >
+                      Clear all
+                    </button>
                   </div>
-                ))}
-              </div>
+                )}
+                <div className="flex flex-col gap-2">
+                  {quickMatches.map(qm => (
+                    <div key={qm.id} className="mono-card" style={{ padding: '12px 16px' }}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm" style={{ color: '#111' }}>
+                              {qm.team1} vs {qm.team2}
+                            </span>
+                            <span className="text-xs font-mono" style={{ color: '#888' }}>
+                              {qm.score1 !== undefined
+                                ? `${qm.score1}-${qm.score2}`
+                                : `${qm.team1Score?.runs}/${qm.team1Score?.wickets} vs ${qm.team2Score?.runs}/${qm.team2Score?.wickets}`
+                              }
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between mt-1">
+                            <span className="text-xs" style={{ color: '#0066ff' }}>{qm.winner}</span>
+                            <span className="text-xs" style={{ color: '#bbb' }}>
+                              {new Date(qm.date).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => deleteQuickMatch(qm.id)}
+                          className="bg-transparent border-none cursor-pointer text-sm"
+                          style={{ color: '#bbb', padding: '2px 6px' }}
+                          title="Delete this match"
+                          aria-label={`Delete match ${qm.team1} vs ${qm.team2}`}
+                        >
+                          &times;
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         )}

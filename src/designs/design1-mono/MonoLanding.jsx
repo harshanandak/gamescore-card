@@ -1,54 +1,111 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { loadCricketTournaments, loadVolleyballTournaments, loadData } from '../../utils/storage';
-import { getSportsByCategory, getSportById } from '../../models/sportRegistry';
+import { loadSportTournaments, loadData, saveData } from '../../utils/storage';
+import { getSportsList, getSportById } from '../../models/sportRegistry';
 
 const QM_KEY = 'gamescore_quickmatches';
 
 export default function MonoLanding() {
   const navigate = useNavigate();
   const [visible, setVisible] = useState(false);
-  const [stats, setStats] = useState({ tournaments: 0, matches: 0, quickMatches: 0 });
-  const [selectedSport, setSelectedSport] = useState(null);
-
-  const SPORT_CATEGORIES = getSportsByCategory();
-
-  // Top 6 featured sports
-  const featuredSports = [
-    getSportById('cricket'),
-    getSportById('volleyball'),
-    getSportById('badminton'),
-    getSportById('football'),
-    getSportById('basketball'),
-    getSportById('tabletennis'),
-  ];
+  const [stats, setStats] = useState({ tournaments: 0, matches: 0, teams: 0 });
+  const [activeTournaments, setActiveTournaments] = useState([]);
+  const [recentMatches, setRecentMatches] = useState([]);
+  const [quickStartSports, setQuickStartSports] = useState([]);
 
   useEffect(() => {
     requestAnimationFrame(() => setVisible(true));
 
-    const cricket = loadCricketTournaments();
-    const volleyball = loadVolleyballTournaments();
-    const qm = loadData(QM_KEY, []);
+    const allSports = getSportsList();
+    let totalTournaments = 0;
+    let totalMatches = 0;
+    const allTeams = new Set();
+    const active = [];
+    const sportPlayCounts = {};
 
-    let matchCount = 0;
-    cricket.forEach(t => { matchCount += t.matches?.filter(m => m.status === 'completed' || m.team1Score).length || 0; });
-    volleyball.forEach(t => { matchCount += t.matches?.filter(m => m.score1 !== null && m.score1 !== undefined).length || 0; });
+    allSports.forEach(sport => {
+      const tournaments = loadSportTournaments(sport.storageKey);
+      totalTournaments += tournaments.length;
+      let sportMatches = 0;
+
+      tournaments.forEach(t => {
+        t.teams?.forEach(team => allTeams.add(team.name));
+        const completed = t.matches?.filter(m =>
+          sport.engine === 'custom-cricket'
+            ? (m.status === 'completed' || m.team1Score)
+            : (m.score1 !== null && m.score1 !== undefined)
+        ).length || 0;
+        const total = t.matches?.length || 0;
+        totalMatches += completed;
+        sportMatches += completed;
+
+        if (total > 0 && completed < total) {
+          active.push({ ...t, sport, completed, total });
+        }
+      });
+
+      sportPlayCounts[sport.id] = sportMatches;
+    });
+
+    const qm = loadData(QM_KEY, []);
+    qm.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    // Count quick matches per sport
+    qm.forEach(m => {
+      if (m.sport) {
+        sportPlayCounts[m.sport] = (sportPlayCounts[m.sport] || 0) + 1;
+      }
+    });
 
     setStats({
-      tournaments: cricket.length + volleyball.length,
-      matches: matchCount + qm.length,
-      quickMatches: qm.length,
+      tournaments: totalTournaments,
+      matches: totalMatches + qm.length,
+      teams: allTeams.size,
     });
+    setActiveTournaments(active);
+    setRecentMatches(qm.slice(0, 5));
+
+    // Smart sort: most played first, then alphabetical
+    const sorted = [...allSports].sort((a, b) => {
+      const countA = sportPlayCounts[a.id] || 0;
+      const countB = sportPlayCounts[b.id] || 0;
+      if (countB !== countA) return countB - countA;
+      return a.name.localeCompare(b.name);
+    });
+    setQuickStartSports(sorted.slice(0, 6));
   }, []);
 
   const hasData = stats.tournaments > 0 || stats.matches > 0;
+
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const year = date.getFullYear().toString().slice(-2);
+    return `${day}.${month}.${year}`;
+  };
+
+  const getScore = (qm) => {
+    if (qm.team1Score) {
+      return `${qm.team1Score.runs}/${qm.team1Score.wickets} vs ${qm.team2Score?.runs}/${qm.team2Score?.wickets}`;
+    }
+    return `${qm.score1} - ${qm.score2}`;
+  };
+
+  const deleteQuickMatch = (id) => {
+    const all = loadData(QM_KEY, []);
+    const updated = all.filter(m => m.id !== id);
+    saveData(QM_KEY, updated);
+    setRecentMatches(prev => prev.filter(m => m.id !== id));
+    setStats(prev => ({ ...prev, matches: prev.matches - 1 }));
+  };
 
   return (
     <div className={`min-h-screen mono-transition ${visible ? 'mono-visible' : 'mono-hidden'}`}>
 
       {/* ─── Nav ─── */}
       <nav className="px-6 py-5" aria-label="Main navigation">
-        <div className="max-w-3xl mx-auto flex items-center justify-between">
+        <div className="max-w-2xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-base font-semibold tracking-tight" style={{ color: '#111' }}>
               GameScore
@@ -76,358 +133,239 @@ export default function MonoLanding() {
         </div>
       </nav>
 
-      {/* ─── Hero ─── */}
-      <section className="px-6 pt-8 pb-14">
-        <div className="max-w-3xl mx-auto text-center">
-          <p
-            className="text-xs uppercase tracking-widest font-normal mb-5"
-            style={{ color: '#888' }}
-          >
-            Tournament scorecard for every sport
-          </p>
-
+      {/* ─── Compact Hero ─── */}
+      <section className="px-6 pt-6 pb-8">
+        <div className="max-w-2xl mx-auto text-center">
           <h1
             className="font-semibold tracking-tight leading-tight mb-5"
-            style={{ color: '#111', fontSize: 'clamp(1.75rem, 5vw, 2.75rem)' }}
+            style={{ color: '#111', fontSize: 'clamp(1.5rem, 4vw, 2.25rem)' }}
           >
             Score matches.<br />
             Track tournaments.<br />
             Know who won.
           </h1>
 
-          <p
-            className="text-base leading-relaxed mb-10 mx-auto"
-            style={{ color: '#888', maxWidth: '420px' }}
-          >
-            Create a tournament, add your teams, and start scoring.
-            Points tables, NRR, standings &mdash; calculated automatically.
-          </p>
-
-          <div className="flex items-center justify-center gap-3 flex-wrap">
-            <button
-              onClick={() => navigate('/play')}
-              className="mono-btn-primary"
-              style={{ padding: '12px 32px', fontSize: '0.9375rem' }}
-            >
-              Start scoring
-            </button>
-            <button
-              onClick={() => {
-                document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' });
-              }}
-              className="mono-btn"
-              style={{ padding: '12px 28px', fontSize: '0.9375rem' }}
-            >
-              How it works
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* ─── Returning user: resume banner ─── */}
-      {hasData && (
-        <section className="px-6 pb-10" aria-label="Welcome back summary">
-          <div className="max-w-3xl mx-auto">
-            <div
-              className="mono-card flex items-center justify-between"
-              style={{ padding: '14px 20px', borderLeft: '3px solid #0066ff' }}
-              role="status"
-              aria-label={`${stats.tournaments} tournaments, ${stats.matches} matches played`}
-            >
-              <div>
-                <p className="text-sm font-medium" style={{ color: '#111' }}>
-                  Welcome back
-                </p>
-                <p className="text-xs" style={{ color: '#888' }}>
-                  {stats.tournaments} tournament{stats.tournaments !== 1 ? 's' : ''}
-                  {' '}&middot; {stats.matches} match{stats.matches !== 1 ? 'es' : ''} played
-                </p>
-              </div>
-              <button
-                onClick={() => navigate('/statistics')}
-                className="mono-btn"
-                style={{ padding: '8px 16px', fontSize: '0.75rem' }}
-              >
-                View stats
-              </button>
-            </div>
-          </div>
-        </section>
-      )}
-
-      <hr className="mono-divider max-w-3xl mx-auto" />
-
-      {/* ─── How it works ─── */}
-      <section id="how-it-works" className="px-6 py-14">
-        <div className="max-w-3xl mx-auto">
-          <h2
-            className="text-xs uppercase tracking-widest font-normal mb-10 text-center"
-            style={{ color: '#888' }}
-          >
-            How it works
-          </h2>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8">
-            <StepCard
-              number="1"
-              title="Pick a sport"
-              desc="Choose from 14 sports. Select tournament mode or start a quick match."
-            />
-            <StepCard
-              number="2"
-              title="Set up teams"
-              desc="Name your tournament, choose the format, and add 2 to 8 teams with optional player rosters."
-            />
-            <StepCard
-              number="3"
-              title="Enter scores"
-              desc="Tap any match to enter scores. Points table and standings update instantly."
-            />
-          </div>
-        </div>
-      </section>
-
-      <hr className="mono-divider max-w-6xl mx-auto" />
-
-      {/* ─── Top Sports ─── */}
-      <section id="sports" className="px-4 sm:px-6 py-14">
-        <div className="max-w-6xl mx-auto">
-          <h2
-            className="text-xs uppercase tracking-widest font-normal mb-10 text-center"
-            style={{ color: '#888' }}
-          >
-            Top Sports
-          </h2>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {featuredSports.map(sport => (
-              <SportCard
-                key={sport.id}
-                icon={sport.icon}
-                name={sport.name}
-                features={sport.features}
-                onTournament={() => navigate(`/${sport.id}/tournament`)}
-                onQuick={() => navigate(`/${sport.id}/quick`)}
-              />
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <hr className="mono-divider max-w-6xl mx-auto" />
-
-      {/* ─── Browse All Sports ─── */}
-      <section className="py-14">
-        <div className="max-w-6xl mx-auto">
-          <h2
-            className="text-xs uppercase tracking-widest font-normal mb-10 text-center px-4 sm:px-6"
-            style={{ color: '#888' }}
-          >
-            Browse All 14 Sports
-          </h2>
-
-          {Object.entries(SPORT_CATEGORIES).map(([category, sports]) => (
-            <div key={category} className="mb-8 last:mb-0">
-              <h3 className="text-xs font-medium mb-4 px-4 sm:px-6" style={{ color: '#666' }}>
-                {category}
-              </h3>
-
-              {/* Mobile: Horizontal scroll */}
-              <div
-                className="flex gap-3 overflow-x-auto pb-4 px-4 sm:hidden"
-                style={{
-                  scrollbarWidth: 'thin',
-                  scrollbarColor: '#ddd #fafafa',
-                  scrollSnapType: 'x mandatory',
-                }}
-              >
-                {sports.map(sport => (
-                  <button
-                    key={sport.id}
-                    onClick={() => setSelectedSport(sport)}
-                    aria-label={`Select ${sport.name}`}
-                    className="mono-card cursor-pointer hover:border-blue-200 transition-colors flex-shrink-0"
-                    style={{
-                      padding: '16px',
-                      background: 'transparent',
-                      border: '1px solid #eee',
-                      width: '110px',
-                      scrollSnapAlign: 'start',
-                    }}
-                  >
-                    <div className="flex flex-col items-center text-center">
-                      <span className="text-3xl mb-2" aria-hidden="true">{sport.icon}</span>
-                      <p className="text-xs font-medium" style={{ color: '#111' }}>
-                        {sport.name}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-
-              {/* Desktop: Grid layout */}
-              <div className="hidden sm:grid sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 px-4 sm:px-6">
-                {sports.map(sport => (
-                  <button
-                    key={sport.id}
-                    onClick={() => setSelectedSport(sport)}
-                    aria-label={`Select ${sport.name}`}
-                    className="mono-card cursor-pointer hover:border-blue-200 transition-colors"
-                    style={{
-                      padding: '16px',
-                      background: 'transparent',
-                      border: '1px solid #eee',
-                    }}
-                  >
-                    <div className="flex flex-col items-center text-center">
-                      <span className="text-3xl mb-2" aria-hidden="true">{sport.icon}</span>
-                      <p className="text-xs font-medium" style={{ color: '#111' }}>
-                        {sport.name}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-
-          <p className="text-center text-xs mt-8 px-4 sm:px-6" style={{ color: '#888' }}>
-            Click any sport to see Tournament/Quick Match options
-          </p>
-        </div>
-      </section>
-
-      <hr className="mono-divider max-w-3xl mx-auto" />
-
-      {/* ─── Features grid ─── */}
-      <section className="px-6 py-14">
-        <div className="max-w-3xl mx-auto">
-          <h2
-            className="text-xs uppercase tracking-widest font-normal mb-10 text-center"
-            style={{ color: '#888' }}
-          >
-            Features
-          </h2>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <FeatureCard label="Round Robin" desc="Auto-generated fixtures" />
-            <FeatureCard label="Points Table" desc="Live standings + NRR" />
-            <FeatureCard label="Quick Match" desc="Score without setup" />
-            <FeatureCard label="Share Results" desc="Copy to clipboard" />
-            <FeatureCard label="Offline" desc="Works without internet" />
-            <FeatureCard label="Auto-Save" desc="Never lose your data" />
-            <FeatureCard label="Mobile First" desc="Built for phones" />
-            <FeatureCard label="Statistics" desc="Cross-sport stats" />
-          </div>
-        </div>
-      </section>
-
-      <hr className="mono-divider max-w-3xl mx-auto" />
-
-      {/* ─── CTA ─── */}
-      <section className="px-6 py-14">
-        <div className="max-w-3xl mx-auto text-center">
-          <h2
-            className="text-lg font-semibold tracking-tight mb-3"
-            style={{ color: '#111' }}
-          >
-            Ready to play?
-          </h2>
-          <p className="text-sm mb-8" style={{ color: '#888' }}>
-            No account needed. Your data saves locally on this device.
-          </p>
           <button
             onClick={() => navigate('/play')}
             className="mono-btn-primary"
-            style={{ padding: '12px 40px', fontSize: '0.9375rem' }}
+            style={{ padding: '12px 32px', fontSize: '0.9375rem' }}
           >
             Start scoring
           </button>
         </div>
       </section>
 
+      {/* ─── Stats Row ─── */}
+      {hasData && (
+        <section className="px-6 pb-6">
+          <div className="max-w-2xl mx-auto">
+            <h2 className="text-xs uppercase tracking-widest font-normal mb-4" style={{ color: '#888' }}>
+              Your activity
+            </h2>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="mono-card text-center" style={{ padding: '14px 8px' }}>
+                <p className="text-xl font-bold font-mono" style={{ color: '#111', fontVariantNumeric: 'tabular-nums' }}>{stats.tournaments}</p>
+                <p className="text-xs mt-1" style={{ color: '#888' }}>Tournament{stats.tournaments !== 1 ? 's' : ''}</p>
+              </div>
+              <div className="mono-card text-center" style={{ padding: '14px 8px' }}>
+                <p className="text-xl font-bold font-mono" style={{ color: '#111', fontVariantNumeric: 'tabular-nums' }}>{stats.matches}</p>
+                <p className="text-xs mt-1" style={{ color: '#888' }}>Match{stats.matches !== 1 ? 'es' : ''}</p>
+              </div>
+              <div className="mono-card text-center" style={{ padding: '14px 8px' }}>
+                <p className="text-xl font-bold font-mono" style={{ color: '#111', fontVariantNumeric: 'tabular-nums' }}>{stats.teams}</p>
+                <p className="text-xs mt-1" style={{ color: '#888' }}>Team{stats.teams !== 1 ? 's' : ''}</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {hasData && <hr className="mono-divider max-w-2xl mx-auto" />}
+
+      {/* ─── Recent Matches ─── */}
+      {recentMatches.length > 0 && (
+        <section className="px-6 py-6">
+          <div className="max-w-2xl mx-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xs uppercase tracking-widest font-normal" style={{ color: '#888' }}>
+                Recent matches
+              </h2>
+              <button
+                onClick={() => navigate('/history')}
+                className="text-xs bg-transparent border-none cursor-pointer font-swiss"
+                style={{ color: '#0066ff' }}
+              >
+                View all
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              {recentMatches.map(qm => {
+                const sportConfig = getSportById(qm.sport);
+                return (
+                  <div key={qm.id} className="mono-card" style={{ padding: '12px 16px' }}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-sm">{sportConfig?.icon || ''}</span>
+                          <span className="text-sm font-medium" style={{ color: '#111' }}>
+                            {qm.team1} vs {qm.team2}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-mono font-bold" style={{ color: '#111', fontVariantNumeric: 'tabular-nums' }}>
+                            {getScore(qm)}
+                          </span>
+                          <span className="text-xs" style={{ color: '#0066ff' }}>
+                            {qm.winner === 'Draw' ? 'Draw' : qm.winner === 'Tie' ? 'Tied' : `${qm.winner} won`}
+                          </span>
+                          <span className="text-xs font-mono" style={{ color: '#bbb' }}>
+                            {formatDate(qm.date)}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => deleteQuickMatch(qm.id)}
+                        className="bg-transparent border-none cursor-pointer text-sm"
+                        style={{ color: '#bbb', padding: '2px 6px' }}
+                        title="Delete this match"
+                        aria-label={`Delete match ${qm.team1} vs ${qm.team2}`}
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {recentMatches.length > 0 && <hr className="mono-divider max-w-2xl mx-auto" />}
+
+      {/* ─── Active Tournaments ─── */}
+      {activeTournaments.length > 0 && (
+        <section className="px-6 py-6">
+          <div className="max-w-2xl mx-auto">
+            <h2 className="text-xs uppercase tracking-widest font-normal mb-4" style={{ color: '#888' }}>
+              Active tournaments
+            </h2>
+
+            <div className="flex flex-col gap-2">
+              {activeTournaments.map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => navigate(`/${t.sport.id}/tournament/${t.id}`)}
+                  className="mono-card w-full text-left bg-transparent border-none cursor-pointer"
+                  style={{ padding: '14px 16px', display: 'block', border: '1px solid #eee' }}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg">{t.sport.icon}</span>
+                      <div>
+                        <p className="text-sm font-medium" style={{ color: '#111' }}>{t.name}</p>
+                        <p className="text-xs" style={{ color: '#888' }}>
+                          {t.teams?.length || 0} teams &middot; {t.sport.name}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="mono-badge mono-badge-live">
+                      {t.completed}/{t.total}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {activeTournaments.length > 0 && <hr className="mono-divider max-w-2xl mx-auto" />}
+
+      {/* ─── Quick Start ─── */}
+      <section className="px-6 py-6">
+        <div className="max-w-2xl mx-auto">
+          <h2 className="text-xs uppercase tracking-widest font-normal mb-4" style={{ color: '#888' }}>
+            Quick start
+          </h2>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {quickStartSports.map(sport => (
+              <div key={sport.id} className="mono-card" style={{ padding: 0 }}>
+                <div style={{ padding: '16px 14px' }}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-2xl" aria-hidden="true">{sport.icon}</span>
+                    <span className="text-sm font-semibold" style={{ color: '#111' }}>
+                      {sport.name}
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => navigate(`/${sport.id}/tournament`)}
+                      className="mono-btn-primary flex-1"
+                      style={{ padding: '8px 6px', fontSize: '0.75rem' }}
+                    >
+                      Tournament
+                    </button>
+                    <button
+                      onClick={() => navigate(`/${sport.id}/quick`)}
+                      className="mono-btn flex-1"
+                      style={{ padding: '8px 6px', fontSize: '0.75rem' }}
+                    >
+                      Quick
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="text-center mt-4">
+            <button
+              onClick={() => navigate('/play')}
+              className="text-xs bg-transparent border-none cursor-pointer font-swiss"
+              style={{ color: '#0066ff' }}
+            >
+              Browse all 14 sports &rarr;
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <hr className="mono-divider max-w-2xl mx-auto" />
+
+      {/* ─── How it works (new users only) ─── */}
+      {!hasData && (
+        <section className="px-6 py-8">
+          <div className="max-w-2xl mx-auto">
+            <h2 className="text-xs uppercase tracking-widest font-normal mb-8 text-center" style={{ color: '#888' }}>
+              How it works
+            </h2>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+              <StepCard number="1" title="Pick a sport" desc="Choose from 14 sports. Select tournament mode or start a quick match." />
+              <StepCard number="2" title="Set up teams" desc="Name your tournament, choose the format, and add 2 to 8 teams." />
+              <StepCard number="3" title="Enter scores" desc="Tap any match to enter scores. Points table and standings update instantly." />
+            </div>
+          </div>
+        </section>
+      )}
+
+      {!hasData && <hr className="mono-divider max-w-2xl mx-auto" />}
+
       {/* ─── Footer ─── */}
-      <footer className="px-6 py-8" style={{ borderTop: '1px solid #eee' }}>
-        <div className="max-w-3xl mx-auto flex items-center justify-between">
+      <footer className="px-6 py-8" style={{ borderTop: hasData ? '1px solid #eee' : 'none' }}>
+        <div className="max-w-2xl mx-auto flex items-center justify-between">
           <p className="text-xs" style={{ color: '#bbb' }}>
             GameScore Card
           </p>
           <p className="text-xs font-mono" style={{ color: '#ccc' }}>
-            v1.0
+            v2.0
           </p>
         </div>
       </footer>
 
-      {/* Sport Selection Modal */}
-      {selectedSport && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center p-6 z-50"
-          onClick={() => setSelectedSport(null)}
-          role="dialog"
-          aria-modal="true"
-          aria-label={`${selectedSport.name} game mode selection`}
-        >
-          <div
-            className="bg-white rounded-lg p-6 max-w-md w-full"
-            onClick={(e) => e.stopPropagation()}
-            style={{ background: '#fff' }}
-          >
-            <div className="flex items-center gap-3 mb-6">
-              <span className="text-4xl" aria-hidden="true">{selectedSport.icon}</span>
-              <div>
-                <h2 className="text-xl font-semibold" style={{ color: '#111' }}>
-                  {selectedSport.name}
-                </h2>
-                <p className="text-sm" style={{ color: '#888' }}>
-                  {selectedSport.desc}
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-3 mb-6">
-              <button
-                onClick={() => {
-                  setSelectedSport(null);
-                  navigate(`/${selectedSport.id}/tournament`);
-                }}
-                className="mono-btn-primary w-full"
-                style={{ padding: '14px', fontSize: '0.9375rem' }}
-              >
-                <div className="flex flex-col items-center">
-                  <span>Tournament</span>
-                  <span className="text-xs font-normal opacity-80 mt-1">
-                    2-8 teams, standings, multiple matches
-                  </span>
-                </div>
-              </button>
-
-              <button
-                onClick={() => {
-                  setSelectedSport(null);
-                  navigate(`/${selectedSport.id}/quick`);
-                }}
-                className="mono-btn w-full"
-                style={{ padding: '14px', fontSize: '0.9375rem' }}
-              >
-                <div className="flex flex-col items-center">
-                  <span>Quick Match</span>
-                  <span className="text-xs font-normal opacity-60 mt-1">
-                    Single game, instant scoring
-                  </span>
-                </div>
-              </button>
-            </div>
-
-            <button
-              onClick={() => setSelectedSport(null)}
-              className="text-xs mt-4 w-full bg-transparent border-none cursor-pointer"
-              style={{ color: '#888' }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -452,70 +390,6 @@ function StepCard({ number, title, desc }) {
         {title}
       </h3>
       <p className="text-xs leading-relaxed" style={{ color: '#888' }}>
-        {desc}
-      </p>
-    </div>
-  );
-}
-
-function SportCard({ icon, name, features, onTournament, onQuick }) {
-  return (
-    <div className="mono-card" style={{ padding: 0 }}>
-      <div style={{ padding: '24px 24px 16px' }}>
-        <div className="flex items-center gap-3 mb-4">
-          <span className="text-3xl" aria-hidden="true">{icon}</span>
-          <h3 className="text-lg font-semibold" style={{ color: '#111' }}>
-            {name}
-          </h3>
-        </div>
-
-        <ul className="mb-5" style={{ padding: 0, margin: 0, listStyle: 'none' }}>
-          {features.map((f, i) => (
-            <li
-              key={i}
-              className="flex items-start gap-2 mb-1.5 text-xs"
-              style={{ color: '#666' }}
-            >
-              <span style={{ color: '#0066ff', flexShrink: 0, marginTop: '1px' }}>&bull;</span>
-              {f}
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <div
-        className="flex gap-2"
-        style={{ padding: '0 24px 20px' }}
-      >
-        <button
-          onClick={onTournament}
-          className="mono-btn-primary flex-1"
-          style={{ padding: '10px 16px', fontSize: '0.8125rem' }}
-        >
-          Tournament
-        </button>
-        <button
-          onClick={onQuick}
-          className="mono-btn flex-1"
-          style={{ padding: '10px 16px', fontSize: '0.8125rem' }}
-        >
-          Quick Match
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function FeatureCard({ label, desc }) {
-  return (
-    <div
-      className="mono-card text-center"
-      style={{ padding: '20px 12px' }}
-    >
-      <p className="text-sm font-medium mb-1" style={{ color: '#111' }}>
-        {label}
-      </p>
-      <p className="text-xs" style={{ color: '#888' }}>
         {desc}
       </p>
     </div>

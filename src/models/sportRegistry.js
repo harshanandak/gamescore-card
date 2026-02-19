@@ -187,7 +187,14 @@ export const SPORT_REGISTRY = {
       winPoints: 3,
       drawPoints: 1,
       lossPoints: 0,
-      quickButtons: null, // Simple +1 goal
+      quickButtons: null,
+      // Real: 2×45 min = 90 min
+      timePresets: [
+        { label: '10 min', value: 600 },
+        { label: '45 min (Half)', value: 2700 },
+        { label: '90 min (Full)', value: 5400 },
+      ],
+      pointPresets: [3, 5, 7, 10],
     },
     standingsColumns: ['P', 'W', 'D', 'L', 'GF', 'GA', 'GD', 'Pts'],
     features: [
@@ -216,6 +223,14 @@ export const SPORT_REGISTRY = {
         { label: '+2', value: 2 },
         { label: '+3', value: 3 },
       ],
+      // Real: 4×12 min (NBA) = 48 min, 4×10 min (FIBA) = 40 min
+      timePresets: [
+        { label: '10 min (Qtr)', value: 600 },
+        { label: '24 min (Half)', value: 1440 },
+        { label: '40 min (FIBA)', value: 2400 },
+        { label: '48 min (NBA)', value: 2880 },
+      ],
+      pointPresets: [11, 15, 21, 30],
     },
     standingsColumns: ['P', 'W', 'L', 'PF', 'PA', '+/-', 'Pts'],
     features: [
@@ -241,6 +256,13 @@ export const SPORT_REGISTRY = {
       drawPoints: 1,
       lossPoints: 0,
       quickButtons: null,
+      // Real: 4×15 min = 60 min
+      timePresets: [
+        { label: '15 min (Qtr)', value: 900 },
+        { label: '30 min (Half)', value: 1800 },
+        { label: '60 min (Full)', value: 3600 },
+      ],
+      pointPresets: [3, 5, 7, 10],
     },
     standingsColumns: ['P', 'W', 'D', 'L', 'GF', 'GA', 'GD', 'Pts'],
     features: [
@@ -266,6 +288,13 @@ export const SPORT_REGISTRY = {
       drawPoints: 1,
       lossPoints: 0,
       quickButtons: null,
+      // Real: 2×30 min = 60 min
+      timePresets: [
+        { label: '10 min', value: 600 },
+        { label: '30 min (Half)', value: 1800 },
+        { label: '60 min (Full)', value: 3600 },
+      ],
+      pointPresets: [10, 15, 20, 25],
     },
     standingsColumns: ['P', 'W', 'D', 'L', 'GF', 'GA', 'GD', 'Pts'],
     features: [
@@ -291,6 +320,13 @@ export const SPORT_REGISTRY = {
       drawPoints: 1,
       lossPoints: 0,
       quickButtons: null,
+      // Real: 2×20 min = 40 min
+      timePresets: [
+        { label: '10 min', value: 600 },
+        { label: '20 min (Half)', value: 1200 },
+        { label: '40 min (Full)', value: 2400 },
+      ],
+      pointPresets: [5, 7, 10, 15],
     },
     standingsColumns: ['P', 'W', 'D', 'L', 'GF', 'GA', 'GD', 'Pts'],
     features: [
@@ -311,23 +347,29 @@ export const SPORT_REGISTRY = {
     config: {
       scoringUnit: 'point',
       pointIncrement: 1,
-      drawAllowed: false,
-      winPoints: 5,
+      drawAllowed: true,
+      winPoints: 2,
       lossPoints: 0,
       quickButtons: [
         { label: '+1', value: 1 },
-        { label: '+2 Bonus', value: 2 },
-        { label: '+3 Super', value: 3 },
-        { label: '+5 All Out', value: 5 },
+        { label: 'Super Tackle (+2)', value: 2 },
+        { label: 'All Out (+2)', value: 2 },
       ],
-      maxPlayers: 7, // 7 players per team on court
+      maxPlayers: 7,
+      // Real: 2×20 min = 40 min (Pro Kabaddi League)
+      timePresets: [
+        { label: '10 min', value: 600 },
+        { label: '20 min (Half)', value: 1200 },
+        { label: '40 min (Full)', value: 2400 },
+      ],
+      pointPresets: [20, 30, 40, 50],
     },
-    standingsColumns: ['P', 'W', 'L', 'SF', 'SA', 'SD', 'Pts'],
+    standingsColumns: ['P', 'W', 'D', 'L', 'SF', 'SA', 'SD', 'Pts'],
     features: [
       'Raid & tackle points',
-      'Bonus points',
+      'Super tackle bonus',
       'All-out bonus (2pts)',
-      'Pro Kabaddi scoring',
+      'Time-based (2x20 min)',
     ],
   },
 
@@ -351,7 +393,14 @@ export const SPORT_REGISTRY = {
         { label: 'Try+Conv (7)', value: 7 },
         { label: 'Drop (3)', value: 3 },
       ],
-      bonusPoints: true, // Try bonus, losing bonus
+      bonusPoints: true,
+      // Real: 2×40 min = 80 min (Rugby Union)
+      timePresets: [
+        { label: '20 min', value: 1200 },
+        { label: '40 min (Half)', value: 2400 },
+        { label: '80 min (Full)', value: 4800 },
+      ],
+      pointPresets: [21, 30, 40, 50],
     },
     standingsColumns: ['P', 'W', 'D', 'L', 'PF', 'PA', '+/-', 'BP', 'Pts'],
     features: [

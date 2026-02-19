@@ -96,11 +96,26 @@ export default function MonoSetsLiveScore() {
   const checkSetComplete = (set) => {
     if (!sportConfig) return false;
 
-    const { pointsPerSet, deciderPoints, winBy, maxPoints } = sportConfig.config;
-    const isDecider = currentSet === (tournament.format.sets - 1);
-    const target = isDecider ? deciderPoints : pointsPerSet;
+    const { winBy, maxPoints } = sportConfig.config;
     const max = Math.max(set.score1, set.score2);
     const min = Math.min(set.score1, set.score2);
+
+    // Default to best-of if type not specified (backwards compatibility)
+    const formatType = tournament.format.type || 'best-of';
+
+    // Single-set format
+    if (formatType === 'single') {
+      const target = tournament.format.points;
+      if (max < target) return false;
+      if (max - min < winBy) return false;
+      if (maxPoints && max >= maxPoints && max > min) return true;
+      return true;
+    }
+
+    // Best-of format
+    const { pointsPerSet, deciderPoints } = sportConfig.config;
+    const isDecider = currentSet === (tournament.format.sets - 1);
+    const target = isDecider && deciderPoints ? deciderPoints : (tournament.format.points || pointsPerSet);
 
     // Must reach target
     if (max < target) return false;
@@ -160,7 +175,16 @@ export default function MonoSetsLiveScore() {
         setShowSetWon(true);
         setTimeout(() => setShowSetWon(false), 1500);
 
-        // Check if match complete (only count completed sets)
+        const formatType = tournament.format.type || 'best-of';
+
+        // Single-set format: match ends after first set
+        if (formatType === 'single') {
+          triggerConfetti();
+          triggerHaptic([100, 100, 100, 100, 100]); // Victory pattern
+          return newSets;
+        }
+
+        // Best-of format: check if match complete
         const t1SetsWon = newSets.filter(s => s.completed && s.score1 > s.score2).length;
         const t2SetsWon = newSets.filter(s => s.completed && s.score2 > s.score1).length;
         const setsToWin = Math.ceil(tournament.format.sets / 2);
@@ -231,19 +255,30 @@ export default function MonoSetsLiveScore() {
     const completedSets = sets.filter(s => s.completed);
     const t1SetsWon = completedSets.filter(s => s.score1 > s.score2).length;
     const t2SetsWon = completedSets.filter(s => s.score2 > s.score1).length;
-    const setsToWin = Math.ceil(tournament.format.sets / 2);
 
-    // Match is only complete if someone has won enough sets
-    const isMatchComplete = t1SetsWon >= setsToWin || t2SetsWon >= setsToWin;
+    const formatType = tournament.format.type || 'best-of';
+    let isMatchComplete;
+    if (formatType === 'single') {
+      // Single-set format: match is complete when the one set is done
+      isMatchComplete = completedSets.length > 0;
+    } else {
+      const setsToWin = Math.ceil(tournament.format.sets / 2);
+      isMatchComplete = t1SetsWon >= setsToWin || t2SetsWon >= setsToWin;
+    }
 
     const updatedMatches = tournament.matches.map(m =>
       m.id === matchId
         ? {
             ...m,
             sets: setsToSave,
-            status: isMatchComplete ? 'completed' : 'pending',
+            status: isMatchComplete ? 'completed' : 'in-progress',
             winner: isMatchComplete ? (t1SetsWon > t2SetsWon ? m.team1Id : m.team2Id) : null,
-            draftState: undefined, // Clear draft state when saving final score
+            draftState: isMatchComplete ? undefined : {
+              currentSet,
+              sets: JSON.parse(JSON.stringify(sets)),
+              history: JSON.parse(JSON.stringify(history.slice(-50))),
+              savedAt: new Date().toISOString(),
+            },
           }
         : m
     );
@@ -303,8 +338,11 @@ export default function MonoSetsLiveScore() {
   const team2Name = getTeamName(match.team2Id);
 
   const { pointsPerSet, deciderPoints, winBy } = sportConfig.config;
+  const formatType = tournament.format.type || 'best-of';
   const isDeciderSet = currentSet === (tournament.format.sets - 1);
-  const targetPoints = isDeciderSet && deciderPoints ? deciderPoints : pointsPerSet;
+  const targetPoints = formatType === 'single'
+    ? tournament.format.points
+    : (isDeciderSet && deciderPoints ? deciderPoints : (tournament.format.points || pointsPerSet));
   const isCurrentSetComplete = sets[currentSet]?.completed || false;
 
   return (
@@ -320,7 +358,7 @@ export default function MonoSetsLiveScore() {
             ← Back
           </button>
           <span className={`mono-badge ${isCurrentSetComplete ? 'mono-badge-final' : 'mono-badge-live'}`}>
-            Set {currentSet + 1} of {tournament.format.sets}
+            {formatType === 'single' ? 'Single Set' : `Set ${currentSet + 1} of ${tournament.format.sets}`}
           </span>
         </div>
 

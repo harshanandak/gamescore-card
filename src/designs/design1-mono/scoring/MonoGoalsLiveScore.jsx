@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getSportById } from '../../../models/sportRegistry';
 import { loadSportTournaments, saveSportTournament } from '../../../utils/storage';
+import { useTimer } from '../../../hooks/useTimer';
 
 const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
@@ -54,6 +55,10 @@ export default function MonoGoalsLiveScore() {
   const [history, setHistory] = useState([]);
   const [hasChanges, setHasChanges] = useState(false);
 
+  // Timer for timed mode
+  const timer = useTimer();
+  const [timerStarted, setTimerStarted] = useState(false);
+
   // Debounce ref for rapid clicks
   const lastClickRef = useRef(0);
   // Track current scores for history snapshots
@@ -92,14 +97,68 @@ export default function MonoGoalsLiveScore() {
     }
   }, [sport, id, matchId]);
 
+  // Start timer for timed mode
+  useEffect(() => {
+    if (!tournament || !timerStarted) return;
+    const formatMode = tournament.format?.mode;
+    if (formatMode === 'timed' && tournament.format?.timeLimit) {
+      timer.start();
+    }
+  }, [tournament, timerStarted]);
+
+  // Auto-end match when time expires in timed mode
+  useEffect(() => {
+    if (!tournament || !sportConfig) return;
+    const formatMode = tournament.format?.mode;
+    const timeLimit = tournament.format?.timeLimit;
+
+    if (formatMode === 'timed' && timeLimit && timer.elapsed >= timeLimit) {
+      // Time's up - auto-save match
+      triggerConfetti();
+      triggerHaptic([100, 100, 100, 100, 100]);
+
+      setTimeout(() => {
+        const updatedMatches = tournament.matches.map(m =>
+          m.id === matchId
+            ? {
+                ...m,
+                score1,
+                score2,
+                status: 'completed',
+                winner: score1 > score2 ? m.team1Id : score2 > score1 ? m.team2Id : 'draw',
+                draftState: undefined,
+              }
+            : m
+        );
+        saveSportTournament(sportConfig.storageKey, {
+          ...tournament,
+          matches: updatedMatches,
+        });
+        navigate(`/${sport}/tournament/${id}`);
+      }, 300);
+    }
+  }, [timer.elapsed, tournament, sportConfig, score1, score2, matchId, sport, id, navigate]);
+
   // Add point/goal
   const addScore = (team, value = 1) => {
     if (!sportConfig || !tournament) return;
+
+    // Check if time is up in timed mode
+    const formatMode = tournament.format?.mode;
+    const timeLimit = tournament.format?.timeLimit;
+    if (formatMode === 'timed' && timeLimit && timer.elapsed >= timeLimit) {
+      return; // Don't allow scoring after time expires
+    }
 
     // Debounce rapid clicks
     const now = Date.now();
     if (now - lastClickRef.current < 150) return;
     lastClickRef.current = now;
+
+    // Start timer on first action (timed mode)
+    if (!timerStarted) {
+      setTimerStarted(true);
+    }
 
     // Haptic feedback: short pulse on score
     triggerHaptic(50);
@@ -113,11 +172,44 @@ export default function MonoGoalsLiveScore() {
 
     setHasChanges(true);
 
+    // Calculate new scores
+    const newScore1 = team === 1 ? score1Ref.current + value : score1Ref.current;
+    const newScore2 = team === 2 ? score2Ref.current + value : score2Ref.current;
+
     // Update score
     if (team === 1) {
-      setScore1(prev => prev + value);
+      setScore1(newScore1);
     } else {
-      setScore2(prev => prev + value);
+      setScore2(newScore2);
+    }
+
+    // Auto-end in points mode (formatMode already declared above)
+    if ((formatMode || 'free') === 'points' && tournament.format.target) {
+      if (newScore1 >= tournament.format.target || newScore2 >= tournament.format.target) {
+        triggerConfetti();
+        triggerHaptic([100, 100, 100, 100, 100]);
+
+        // Save match as completed
+        setTimeout(() => {
+          const updatedMatches = tournament.matches.map(m =>
+            m.id === matchId
+              ? {
+                  ...m,
+                  score1: newScore1,
+                  score2: newScore2,
+                  status: 'completed',
+                  winner: newScore1 > newScore2 ? m.team1Id : newScore2 > newScore1 ? m.team2Id : 'draw',
+                  draftState: undefined,
+                }
+              : m
+          );
+          saveSportTournament(sportConfig.storageKey, {
+            ...tournament,
+            matches: updatedMatches,
+          });
+          navigate(`/${sport}/tournament/${id}`);
+        }, 300);
+      }
     }
   };
 
@@ -243,6 +335,18 @@ export default function MonoGoalsLiveScore() {
   const team2Name = getTeamName(match.team2Id);
   const quickButtons = sportConfig.config.quickButtons;
 
+  // Timed mode helpers
+  const isTimedMode = tournament.format?.mode === 'timed';
+  const timeLimit = isTimedMode ? tournament.format.timeLimit : null;
+  const remainingSeconds = isTimedMode && timeLimit ? Math.max(0, timeLimit - timer.elapsed) : null;
+  const isTimeUp = isTimedMode && remainingSeconds === 0;
+
+  const formatCountdown = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
   return (
     <div className="min-h-screen px-6 py-10">
       <div className="max-w-2xl mx-auto">
@@ -255,9 +359,15 @@ export default function MonoGoalsLiveScore() {
           >
             ← Back
           </button>
-          <span className="mono-badge mono-badge-live">
-            Live Scoring
-          </span>
+          {isTimedMode ? (
+            <span className={`mono-badge ${isTimeUp ? 'mono-badge-paused' : 'mono-badge-live'}`} style={{ color: isTimeUp ? '#dc2626' : undefined }}>
+              {isTimeUp ? "Time's up!" : formatCountdown(remainingSeconds)}
+            </span>
+          ) : (
+            <span className="mono-badge mono-badge-live">
+              {tournament.format?.mode === 'points' ? `First to ${tournament.format.target}` : 'Live Scoring'}
+            </span>
+          )}
         </div>
 
         {/* ARIA live region for score announcements */}
@@ -294,7 +404,8 @@ export default function MonoGoalsLiveScore() {
                     key={idx}
                     onClick={() => addScore(1, btn.value)}
                     className="mono-btn text-sm py-2"
-                    style={{ touchAction: 'manipulation' }}
+                    style={{ touchAction: 'manipulation', opacity: isTimeUp ? 0.4 : 1 }}
+                    disabled={isTimeUp}
                     aria-label={`Add ${btn.value} ${btn.value === 1 ? 'point' : 'points'} to ${team1Name}`}
                   >
                     {btn.label}
@@ -304,7 +415,8 @@ export default function MonoGoalsLiveScore() {
                 <button
                   onClick={() => addScore(1, 1)}
                   className="mono-btn-primary text-lg py-3"
-                  style={{ touchAction: 'manipulation' }}
+                  style={{ touchAction: 'manipulation', opacity: isTimeUp ? 0.4 : 1 }}
+                  disabled={isTimeUp}
                   aria-label={`Add 1 point to ${team1Name}`}
                 >
                   + 1
@@ -335,7 +447,8 @@ export default function MonoGoalsLiveScore() {
                     key={idx}
                     onClick={() => addScore(2, btn.value)}
                     className="mono-btn text-sm py-2"
-                    style={{ touchAction: 'manipulation' }}
+                    style={{ touchAction: 'manipulation', opacity: isTimeUp ? 0.4 : 1 }}
+                    disabled={isTimeUp}
                     aria-label={`Add ${btn.value} ${btn.value === 1 ? 'point' : 'points'} to ${team2Name}`}
                   >
                     {btn.label}
@@ -345,7 +458,8 @@ export default function MonoGoalsLiveScore() {
                 <button
                   onClick={() => addScore(2, 1)}
                   className="mono-btn-primary text-lg py-3"
-                  style={{ touchAction: 'manipulation' }}
+                  style={{ touchAction: 'manipulation', opacity: isTimeUp ? 0.4 : 1 }}
+                  disabled={isTimeUp}
                   aria-label={`Add 1 point to ${team2Name}`}
                 >
                   + 1
@@ -357,7 +471,10 @@ export default function MonoGoalsLiveScore() {
 
         {/* Info */}
         <p className="text-xs text-center mb-2" style={{ color: '#bbb' }}>
-          {sportConfig.config.drawAllowed ? 'Draws allowed' : 'No draws'} · Tap buttons to score
+          {isTimedMode ? `${Math.floor(timeLimit / 60)} min match` :
+           tournament.format?.mode === 'points' ? `First to ${tournament.format.target}` : 'Free play'}
+          {' · '}
+          {sportConfig.config.drawAllowed ? 'Draws allowed' : 'No draws'}
         </p>
         {!isTouchDevice && (
           <p className="text-xs text-center mb-6" style={{ color: '#ccc' }}>

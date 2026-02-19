@@ -95,6 +95,7 @@ export default function MonoCricketLiveScore() {
   }, [id, matchId]);
 
   const totalBalls = tournament?.format?.overs ? tournament.format.overs * 6 : 12;
+  const maxWickets = (tournament?.format?.players || 11) - 1;
 
   // Add runs
   const addRuns = (runs) => {
@@ -181,7 +182,7 @@ export default function MonoCricketLiveScore() {
       team.balls += 1;
 
       // Check if all out (10 wickets)
-      if (team.wickets >= 10) {
+      if (team.wickets >= maxWickets) {
         team.allOut = true;
         if (innings === 1) {
           // Switch to innings 2
@@ -384,7 +385,7 @@ export default function MonoCricketLiveScore() {
     : null;
 
   // Check if innings/match should be complete
-  const isInningsComplete = currentScore.balls >= totalBalls || currentScore.wickets >= 10;
+  const isInningsComplete = currentScore.balls >= totalBalls || currentScore.wickets >= maxWickets;
   const isMatchComplete = innings === 2 && (isInningsComplete || (target !== null && currentScore.runs > target));
 
   return (

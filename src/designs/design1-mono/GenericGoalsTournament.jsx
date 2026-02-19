@@ -139,6 +139,11 @@ export default function GenericGoalsTournament() {
                           Completed
                         </span>
                       )}
+                      {hasScore && match.status !== 'completed' && (
+                        <span className="mono-badge mono-badge-live">
+                          In Progress
+                        </span>
+                      )}
                       {hasScore && (
                         <button
                           onClick={() => deleteScore(match.id)}

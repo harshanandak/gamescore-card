@@ -76,7 +76,7 @@ export default function MonoTournamentList() {
             {tournaments.map(t => {
               const matchCount = t.matches?.length || 0;
               const completedCount = t.matches?.filter(m =>
-                m.status === 'completed' || m.score1 !== null
+                m.status === 'completed'
               ).length || 0;
 
               return (
@@ -101,9 +101,9 @@ export default function MonoTournamentList() {
                       </div>
                     </div>
                     <p className="text-xs" style={{ color: '#888' }}>
-                      {t.teams?.length || 0} teams &middot; {matchCount} match{matchCount > 1 ? 'es' : ''}
-                      {t.teams?.length === 2 && ' \u00b7 Single elimination'}
-                      {t.teams?.length >= 3 && ' \u00b7 Round-robin'}
+                      {t.teams?.length || 0} teams &middot;{' '}
+                      {t.teams?.length === 2 && `${matchCount}-match series`}
+                      {t.teams?.length >= 3 && `${matchCount} matches \u00b7 Round-robin`}
                       {t.format?.overs ? ` \u00b7 ${t.format.overs} overs` : ''}
                       {t.format?.sets ? ` \u00b7 Best of ${t.format.sets}` : ''}
                     </p>

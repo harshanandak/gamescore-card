@@ -10,7 +10,8 @@ export default function MonoSportHome() {
   const [visible, setVisible] = useState(false);
   const [tournamentCounts, setTournamentCounts] = useState({});
   const [activeTab, setActiveTab] = useState('Racquet Sports');
-  const [selectedSport, setSelectedSport] = useState(null);
+  const [selectedSportId, setSelectedSportId] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [layout, setLayout] = useState(() => {
     return localStorage.getItem(LAYOUT_KEY) || 'tabs'; // 'tabs' or 'grid'
   });
@@ -40,13 +41,10 @@ export default function MonoSportHome() {
     localStorage.setItem(LAYOUT_KEY, newLayout);
   };
 
-  const openSportModal = (sport) => {
-    setSelectedSport(sport);
-  };
-
-  const closeSportModal = () => {
-    setSelectedSport(null);
-  };
+  const allSports = Object.values(SPORT_CATEGORIES).flat();
+  const filteredSports = searchQuery.trim()
+    ? allSports.filter(s => s.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+    : [];
 
   return (
     <div className={`min-h-screen px-4 sm:px-6 py-6 sm:py-10 mono-transition ${visible ? 'mono-visible' : 'mono-hidden'}`}>
@@ -84,14 +82,70 @@ export default function MonoSportHome() {
             <button
               onClick={() => navigate('/statistics')}
               className="mono-btn"
-              style={{ fontSize: '0.9375rem', padding: '10px 18px' }}
+              style={{ fontSize: '0.9375rem', padding: '10px 18px', fontWeight: '500' }}
             >
               Statistics
             </button>
           </div>
         </nav>
 
-        {/* Sport Selection */}
+        {/* Search */}
+        <div className="mb-8">
+          <input
+            type="text"
+            className="mono-input"
+            placeholder="Search sports..."
+            value={searchQuery}
+            onChange={e => { setSearchQuery(e.target.value); setSelectedSportId(null); }}
+          />
+        </div>
+
+        {/* Search Results */}
+        {searchQuery.trim() ? (
+          <div className="mb-8">
+            <h2 className="text-xs uppercase tracking-widest font-normal mb-6" style={{ color: '#888' }}>
+              {filteredSports.length} result{filteredSports.length !== 1 ? 's' : ''}
+            </h2>
+            {filteredSports.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {filteredSports.map(sport => (
+                  <div key={sport.id} className="mono-card" style={{ padding: 0 }}>
+                    <div style={{ padding: '20px 24px' }}>
+                      <div className="flex items-center gap-3 mb-4">
+                        <span className="text-3xl" aria-hidden="true">{sport.icon}</span>
+                        <div className="flex-1">
+                          <h3 className="text-base font-semibold mb-1" style={{ color: '#111' }}>
+                            {sport.name}
+                          </h3>
+                          <p className="text-xs" style={{ color: '#888' }}>{sport.desc}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => navigate(`/${sport.id}/tournament`)}
+                          className="mono-btn-primary flex-1"
+                          style={{ fontSize: '0.8125rem', padding: '10px 16px' }}
+                        >
+                          Tournament
+                        </button>
+                        <button
+                          onClick={() => navigate(`/${sport.id}/quick`)}
+                          className="mono-btn flex-1"
+                          style={{ fontSize: '0.8125rem', padding: '10px 16px' }}
+                        >
+                          Quick Match
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm" style={{ color: '#888' }}>No sports found.</p>
+            )}
+          </div>
+        ) : (
+
         <div className="mb-8">
           <h2 className="text-xs uppercase tracking-widest font-normal mb-6" style={{ color: '#888' }}>
             Choose sport
@@ -191,114 +245,67 @@ export default function MonoSportHome() {
                   </h3>
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-                    {sports.map(sport => (
-                      <button
-                        key={sport.id}
-                        className="mono-card cursor-pointer hover:border-blue-200 transition-colors"
-                        style={{ padding: '16px', position: 'relative', background: '#fff' }}
-                        onClick={() => openSportModal(sport)}
-                        aria-label={`Select ${sport.name}`}
-                      >
-                        <div className="flex flex-col items-center text-center">
-                          <span className="text-3xl mb-2" aria-hidden="true">{sport.icon}</span>
-                          <span className="text-sm font-semibold mb-1 block" style={{ color: '#111' }}>
-                            {sport.name}
-                          </span>
-                          {getCounts(sport.id) > 0 && (
-                            <span className="text-xs font-mono" style={{ color: '#888' }}>
-                              {getCounts(sport.id)} saved
-                            </span>
+                    {sports.map(sport => {
+                      const isOpen = selectedSportId === sport.id;
+                      return (
+                        <div
+                          key={sport.id}
+                          className="transition-all"
+                          style={{
+                            padding: '16px',
+                            background: isOpen ? '#fff' : 'transparent',
+                            border: isOpen ? '1px solid #0066ff' : '1px solid #eee',
+                          }}
+                        >
+                          <button
+                            className="w-full bg-transparent border-none cursor-pointer"
+                            style={{ padding: 0 }}
+                            onClick={() => setSelectedSportId(isOpen ? null : sport.id)}
+                            aria-label={`Select ${sport.name}`}
+                          >
+                            <div className="flex flex-col items-center text-center">
+                              <span className="text-3xl mb-2" aria-hidden="true">{sport.icon}</span>
+                              <span className="text-sm font-semibold mb-1 block" style={{ color: '#111' }}>
+                                {sport.name}
+                              </span>
+                              {getCounts(sport.id) > 0 && (
+                                <span className="text-xs font-mono" style={{ color: '#888' }}>
+                                  {getCounts(sport.id)} saved
+                                </span>
+                              )}
+                            </div>
+                          </button>
+
+                          {isOpen && (
+                            <div className="flex flex-col gap-2 mt-3 pt-3" style={{ borderTop: '1px solid #eee' }}>
+                              <button
+                                onClick={() => navigate(`/${sport.id}/tournament`)}
+                                className="mono-btn-primary"
+                                style={{ padding: '6px 8px', fontSize: '0.6875rem' }}
+                              >
+                                Tournament
+                              </button>
+                              <button
+                                onClick={() => navigate(`/${sport.id}/quick`)}
+                                className="mono-btn"
+                                style={{ padding: '6px 8px', fontSize: '0.6875rem' }}
+                              >
+                                Quick Match
+                              </button>
+                            </div>
                           )}
                         </div>
-                      </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               ))}
             </>
           )}
         </div>
+
+        )}
       </div>
-
-      {/* Sport Selection Modal (for Grid layout) */}
-      {selectedSport && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center p-6 z-50"
-          onClick={closeSportModal}
-          role="dialog"
-          aria-modal="true"
-          aria-label={`${selectedSport.name} game mode selection`}
-        >
-          <div
-            className="bg-white rounded-lg p-6 max-w-md w-full"
-            onClick={(e) => e.stopPropagation()}
-            style={{ background: '#fff' }}
-          >
-            <div className="flex items-center gap-3 mb-6">
-              <span className="text-4xl" aria-hidden="true">{selectedSport.icon}</span>
-              <div>
-                <h2 className="text-xl font-semibold" style={{ color: '#111' }}>
-                  {selectedSport.name}
-                </h2>
-                <p className="text-sm" style={{ color: '#888' }}>
-                  {selectedSport.desc}
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-3 mb-6">
-              <button
-                onClick={() => {
-                  closeSportModal();
-                  navigate(`/${selectedSport.id}/tournament`);
-                }}
-                className="mono-btn-primary w-full"
-                style={{ padding: '14px', fontSize: '0.9375rem' }}
-              >
-                <div className="flex flex-col items-center">
-                  <span>Tournament</span>
-                  <span className="text-xs font-normal opacity-80 mt-1">
-                    2-8 teams, standings, multiple matches
-                  </span>
-                </div>
-              </button>
-
-              <button
-                onClick={() => {
-                  closeSportModal();
-                  navigate(`/${selectedSport.id}/quick`);
-                }}
-                className="mono-btn w-full"
-                style={{ padding: '14px', fontSize: '0.9375rem' }}
-              >
-                <div className="flex flex-col items-center">
-                  <span>Quick Match</span>
-                  <span className="text-xs font-normal opacity-60 mt-1">
-                    Single game, instant scoring
-                  </span>
-                </div>
-              </button>
-            </div>
-
-            {getCounts(selectedSport.id) > 0 && (
-              <div
-                className="text-center text-xs pt-4"
-                style={{ color: '#888', borderTop: '1px solid #eee' }}
-              >
-                {getCounts(selectedSport.id)} saved tournament{getCounts(selectedSport.id) > 1 ? 's' : ''}
-              </div>
-            )}
-
-            <button
-              onClick={closeSportModal}
-              className="text-xs mt-4 w-full bg-transparent border-none cursor-pointer"
-              style={{ color: '#888' }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

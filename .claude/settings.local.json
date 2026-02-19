@@ -28,7 +28,13 @@
       "Bash(where:*)",
       "Bash(bunx --bun vite build:*)",
       "Bash(npx vitest:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(git restore:*)",
+      "Bash(bun run preview:*)",
+      "mcp__claude_ai_Vercel__deploy_to_vercel",
+      "mcp__claude_ai_Parallel_Ai_seach__web_fetch",
+      "Bash(bunx eslint:*)",
+      "Bash(grep:*)"
     ]
   }
 }

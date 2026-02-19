@@ -32,8 +32,11 @@
   color: #bbb;
 }
 
-.mono-input:focus {
+.mono-input:focus,
+.mono-input:focus-visible {
   border-bottom-color: #0066ff;
+  outline: none;
+  box-shadow: none;
 }
 
 /* --- Buttons --- */
@@ -353,7 +356,6 @@
 /* --- Focus Visible Styles (Accessibility) --- */
 .mono-btn:focus-visible,
 .mono-btn-primary:focus-visible,
-.mono-input:focus-visible,
 .mono-score-btn:focus-visible,
 .mono-type-card:focus-visible {
   outline: 2px solid #0066ff;
