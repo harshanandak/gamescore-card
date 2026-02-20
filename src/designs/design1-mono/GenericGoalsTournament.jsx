@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { loadSportTournaments, saveSportTournament } from '../../utils/storage';
 import { calculateGoalsStandings } from '../../utils/standingsCalculator';
 import { getSportById } from '../../models/sportRegistry';
+import { isGroupStageComplete, initializeKnockoutStage, updateKnockoutBracket, isTournamentComplete, getTournamentWinner } from '../../utils/knockoutManager';
+import KnockoutMatchCard from './KnockoutMatchCard';
 
 export default function GenericGoalsTournament() {
   const navigate = useNavigate();
@@ -35,6 +37,33 @@ export default function GenericGoalsTournament() {
     },
     [tournament, sportConfig]
   );
+
+  // Knockout phase transition
+  useEffect(() => {
+    if (!tournament || !tournament.knockoutConfig) return;
+    if (tournament.phase !== 'group') return;
+    if (!isGroupStageComplete(tournament.matches)) return;
+    if (tournament.knockoutMatches && tournament.knockoutMatches.length > 0) return;
+
+    const updated = initializeKnockoutStage(tournament, standings);
+    if (updated !== tournament) {
+      const initializedKO = updated.knockoutMatches.map(m => ({
+        ...m,
+        score1: null,
+        score2: null,
+      }));
+      setTournament({ ...updated, knockoutMatches: initializedKO });
+    }
+  }, [tournament, standings]);
+
+  // Bracket seeding
+  useEffect(() => {
+    if (!tournament?.knockoutMatches?.length) return;
+    const updated = updateKnockoutBracket(tournament.knockoutMatches);
+    if (updated !== tournament.knockoutMatches) {
+      setTournament(prev => ({ ...prev, knockoutMatches: updated }));
+    }
+  }, [tournament?.knockoutMatches]);
 
   if (!sportConfig) {
     return (
@@ -72,41 +101,101 @@ export default function GenericGoalsTournament() {
     setTournament({ ...tournament, matches: updatedMatches });
   };
 
+  const hasKnockouts = tournament.winnerMode === 'knockouts';
+  const tournamentDone = isTournamentComplete(tournament);
+  const winner = getTournamentWinner(tournament);
+
+  let badgeClass = 'mono-badge-live';
+  let badgeText = 'Live';
+  if (tournamentDone) {
+    badgeClass = 'mono-badge-final';
+    badgeText = 'Complete';
+  } else if (tournament.phase === 'knockout') {
+    badgeClass = 'mono-badge-paused';
+    badgeText = 'Knockout';
+  }
+
+  const tabs = ['matches', 'standings'];
+  if (hasKnockouts) tabs.push('knockout');
+  tabs.push('teams');
+
   return (
     <div className={`min-h-screen mono-transition ${visible ? 'mono-visible' : 'mono-hidden'}`}>
       <div className="max-w-2xl mx-auto px-6 py-10">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <button
-            onClick={() => navigate(`/${sport}/tournament`)}
-            className="flex items-center gap-2 text-sm"
-            style={{ color: '#888' }}
-          >
-            <span>←</span>
-            <span>Back</span>
-          </button>
-          <span className="mono-badge mono-badge-live">
-            {completedMatches}/{totalMatches} Matches
+        {/* Back */}
+        <button
+          onClick={() => navigate(`/${sport}/tournament`)}
+          className="flex items-center gap-1 text-sm mb-6"
+          style={{ color: '#888' }}
+        >
+          <span>←</span>
+          <span>Tournaments</span>
+        </button>
+
+        {/* Title row */}
+        <div className="flex items-center gap-3 mb-1">
+          <h1 className="text-xl font-semibold tracking-tight" style={{ color: '#111' }}>
+            {tournament.name}
+          </h1>
+          <span className={`mono-badge ${badgeClass}`}>
+            {badgeText}
           </span>
         </div>
 
-        <h1 className="text-2xl font-bold mb-2">{tournament.name}</h1>
-        <p className="text-sm mb-8" style={{ color: '#888' }}>
-          {sportConfig.name} Tournament
+        {/* Meta */}
+        <p className="text-xs mb-5" style={{ color: '#888' }}>
+          {sportConfig.name} · {tournament.teams.length} teams · Round Robin{hasKnockouts ? ' + Knockouts' : ''}
         </p>
 
+        {/* Match progress segments */}
+        <div className="flex items-center gap-3 mb-5">
+          <div className="flex items-center gap-1">
+            {tournament.matches.map((m) => (
+              <div
+                key={m.id}
+                title={`Match: ${getTeamName(m.team1Id)} vs ${getTeamName(m.team2Id)}`}
+                style={{
+                  width: 18, height: 6,
+                  background: (m.status === 'completed' || m.status === 'in-progress') ? '#0066ff' : '#e5e5e5',
+                  opacity: m.status === 'in-progress' ? 0.4 : 1,
+                  transition: 'background 0.2s ease, opacity 0.2s ease',
+                }}
+              />
+            ))}
+          </div>
+          <span className="text-xs font-mono" style={{ color: '#888' }}>{completedMatches}/{totalMatches}</span>
+          {hasKnockouts && tournament.knockoutMatches && tournament.knockoutMatches.length > 0 && (
+            <>
+              <div style={{ width: 1, height: 10, background: '#ddd' }} />
+              <div className="flex items-center gap-1">
+                {tournament.knockoutMatches.map((m) => (
+                  <div
+                    key={m.id}
+                    title={m.label}
+                    style={{
+                      width: 18, height: 6,
+                      background: m.status === 'completed' ? '#0066ff' : m.status === 'in-progress' ? '#0066ff' : '#e5e5e5',
+                      opacity: m.status === 'completed' ? 1 : m.status === 'in-progress' ? 0.4 : 1,
+                      transition: 'background 0.2s ease, opacity 0.2s ease',
+                    }}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
         {/* Tabs */}
-        <div className="flex gap-4 mb-6 border-b" style={{ borderColor: '#eeeeee' }}>
-          {['matches', 'standings', 'teams'].map(t => (
+        <div className="flex gap-0 mb-6" style={{ borderBottom: '1px solid #eee' }}>
+          {tabs.map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`pb-3 text-sm font-medium transition-colors ${
-                tab === t ? 'border-b-2' : ''
-              }`}
+              className="bg-transparent border-none cursor-pointer font-swiss px-4 py-3 text-sm"
               style={{
                 color: tab === t ? '#0066ff' : '#888',
-                borderColor: tab === t ? '#0066ff' : 'transparent',
+                borderBottom: tab === t ? '2px solid #0066ff' : '2px solid transparent',
+                fontWeight: tab === t ? 500 : 400,
               }}
             >
               {t.charAt(0).toUpperCase() + t.slice(1)}
@@ -202,6 +291,76 @@ export default function GenericGoalsTournament() {
                 </div>
               );
             })}
+
+            {/* Knockout matches in schedule */}
+            {hasKnockouts && tournament.knockoutMatches && tournament.knockoutMatches.length > 0 && (
+              <>
+                <hr className="mono-divider" style={{ margin: '24px 0' }} />
+                <p className="text-xs uppercase tracking-widest mb-2" style={{ color: '#888' }}>
+                  Knockout Stage
+                </p>
+                {tournament.knockoutMatches.map(match => (
+                  <KnockoutMatchCard
+                    key={match.id}
+                    match={match}
+                    tournament={tournament}
+                    sport={sport}
+                    id={id}
+                    navigate={navigate}
+                    getTeamName={getTeamName}
+                    engine="goals"
+                  />
+                ))}
+              </>
+            )}
+
+            {/* Show placeholder knockout schedule before group stage completes */}
+            {hasKnockouts && (!tournament.knockoutMatches || tournament.knockoutMatches.length === 0) && (
+              <>
+                <hr className="mono-divider" style={{ margin: '24px 0' }} />
+                <p className="text-xs uppercase tracking-widest mb-2" style={{ color: '#888' }}>
+                  Knockout Stage
+                </p>
+                {tournament.knockoutConfig.teamsAdvancing === 4 && (
+                  <>
+                    <div className="mono-card p-5 mb-3">
+                      <div className="text-xs font-mono uppercase tracking-wider mb-3" style={{ color: '#aaa' }}>Semi-final 1</div>
+                      <div className="grid grid-cols-3 gap-6 items-center">
+                        <div className="text-right text-base font-medium" style={{ color: '#ccc' }}>TBD</div>
+                        <div className="text-center text-xs" style={{ color: '#bbb' }}>vs</div>
+                        <div className="text-left text-base font-medium" style={{ color: '#ccc' }}>TBD</div>
+                      </div>
+                    </div>
+                    <div className="mono-card p-5 mb-3">
+                      <div className="text-xs font-mono uppercase tracking-wider mb-3" style={{ color: '#aaa' }}>Semi-final 2</div>
+                      <div className="grid grid-cols-3 gap-6 items-center">
+                        <div className="text-right text-base font-medium" style={{ color: '#ccc' }}>TBD</div>
+                        <div className="text-center text-xs" style={{ color: '#bbb' }}>vs</div>
+                        <div className="text-left text-base font-medium" style={{ color: '#ccc' }}>TBD</div>
+                      </div>
+                    </div>
+                  </>
+                )}
+                <div className="mono-card p-5 mb-3">
+                  <div className="text-xs font-mono uppercase tracking-wider mb-3" style={{ color: '#aaa' }}>Final</div>
+                  <div className="grid grid-cols-3 gap-6 items-center">
+                    <div className="text-right text-base font-medium" style={{ color: '#ccc' }}>TBD</div>
+                    <div className="text-center text-xs" style={{ color: '#bbb' }}>vs</div>
+                    <div className="text-left text-base font-medium" style={{ color: '#ccc' }}>TBD</div>
+                  </div>
+                </div>
+                {tournament.knockoutConfig.thirdPlaceMatch && (
+                  <div className="mono-card p-5">
+                    <div className="text-xs font-mono uppercase tracking-wider mb-3" style={{ color: '#aaa' }}>3rd Place</div>
+                    <div className="grid grid-cols-3 gap-6 items-center">
+                      <div className="text-right text-base font-medium" style={{ color: '#ccc' }}>TBD</div>
+                      <div className="text-center text-xs" style={{ color: '#bbb' }}>vs</div>
+                      <div className="text-left text-base font-medium" style={{ color: '#ccc' }}>TBD</div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
 
@@ -240,6 +399,103 @@ export default function GenericGoalsTournament() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Knockout Tab */}
+        {tab === 'knockout' && hasKnockouts && (
+          <div>
+            {tournament.phase === 'group' && (
+              <div className="mono-card p-5 mb-6 text-center">
+                <p className="text-sm" style={{ color: '#888' }}>
+                  Knockout stage begins after all group matches are completed
+                </p>
+                <p className="text-xs mt-2 font-mono" style={{ color: '#bbb' }}>
+                  {completedMatches}/{totalMatches} group matches done
+                </p>
+              </div>
+            )}
+
+            {tournament.phase === 'knockout' && tournament.knockoutMatches && (
+              <div className="space-y-6">
+                {tournament.knockoutConfig.teamsAdvancing === 4 && (
+                  <div>
+                    <h3 className="text-xs uppercase tracking-widest font-normal mb-3" style={{ color: '#888' }}>
+                      Semi-finals
+                    </h3>
+                    <div className="space-y-3">
+                      {tournament.knockoutMatches
+                        .filter(m => m.round.startsWith('semi'))
+                        .map(match => (
+                          <KnockoutMatchCard
+                            key={match.id}
+                            match={match}
+                            tournament={tournament}
+                            sport={sport}
+                            id={id}
+                            navigate={navigate}
+                            getTeamName={getTeamName}
+                            engine="goals"
+                          />
+                        ))}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <h3 className="text-xs uppercase tracking-widest font-normal mb-3" style={{ color: '#888' }}>
+                    Final
+                  </h3>
+                  {tournament.knockoutMatches
+                    .filter(m => m.round === 'final')
+                    .map(match => (
+                      <KnockoutMatchCard
+                        key={match.id}
+                        match={match}
+                        tournament={tournament}
+                        sport={sport}
+                        id={id}
+                        navigate={navigate}
+                        getTeamName={getTeamName}
+                        engine="goals"
+                      />
+                    ))}
+                </div>
+
+                {tournament.knockoutConfig.thirdPlaceMatch && (
+                  <div>
+                    <h3 className="text-xs uppercase tracking-widest font-normal mb-3" style={{ color: '#888' }}>
+                      3rd Place
+                    </h3>
+                    {tournament.knockoutMatches
+                      .filter(m => m.round === 'third-place')
+                      .map(match => (
+                        <KnockoutMatchCard
+                          key={match.id}
+                          match={match}
+                          tournament={tournament}
+                          sport={sport}
+                          id={id}
+                          navigate={navigate}
+                          getTeamName={getTeamName}
+                          engine="goals"
+                        />
+                      ))}
+                  </div>
+                )}
+
+                {tournamentDone && winner && (
+                  <div className="mono-card p-6 text-center" style={{ borderColor: '#0066ff' }}>
+                    <p className="text-xs uppercase tracking-widest mb-2" style={{ color: '#888' }}>
+                      Champion
+                    </p>
+                    <p className="text-xl font-bold" style={{ color: '#111' }}>
+                      {winner.name}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

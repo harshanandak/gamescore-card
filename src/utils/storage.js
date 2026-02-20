@@ -5,7 +5,8 @@ const STORAGE_KEYS = {
   TOURNAMENTS: 'gamescore_tournaments',
   CRICKET_DATA: 'gamescore_cricket',
   VOLLEYBALL_DATA: 'gamescore_volleyball',
-  STATISTICS: 'gamescore_statistics'
+  STATISTICS: 'gamescore_statistics',
+  QUICK_MATCHES: 'gamescore_quickmatches',
 };
 
 // --- Safari Private Mode Detection & Memory Fallback ---
@@ -252,6 +253,33 @@ export const deleteSportTournament = (storageKey, tournamentId) => {
   const tournaments = loadData(storageKey, []);
   const filtered = tournaments.filter(t => t.id !== tournamentId);
   return saveData(storageKey, filtered);
+};
+
+// Quick Match storage (for test matches that navigate to a separate page)
+export const saveQuickMatch = (match) => {
+  const matches = loadData(STORAGE_KEYS.QUICK_MATCHES, []);
+  const idx = matches.findIndex(m => m.id === match.id);
+  if (idx >= 0) {
+    matches[idx] = match;
+  } else {
+    matches.push(match);
+  }
+  return saveData(STORAGE_KEYS.QUICK_MATCHES, matches);
+};
+
+export const loadQuickMatches = () => {
+  return loadData(STORAGE_KEYS.QUICK_MATCHES, []);
+};
+
+export const loadQuickMatch = (matchId) => {
+  const matches = loadQuickMatches();
+  return matches.find(m => m.id === matchId || m.id === Number(matchId)) || null;
+};
+
+export const deleteQuickMatch = (matchId) => {
+  const matches = loadData(STORAGE_KEYS.QUICK_MATCHES, []);
+  const filtered = matches.filter(m => m.id !== matchId);
+  return saveData(STORAGE_KEYS.QUICK_MATCHES, filtered);
 };
 
 export {

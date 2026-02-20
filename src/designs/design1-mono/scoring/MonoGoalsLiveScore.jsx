@@ -2,9 +2,17 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getSportById } from '../../../models/sportRegistry';
 import { loadSportTournaments, saveSportTournament } from '../../../utils/storage';
+import { updateMatchInTournament } from '../../../utils/knockoutManager';
 import { useTimer } from '../../../hooks/useTimer';
 
-const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+const isTouchDevice = 'ontouchstart' in globalThis || navigator.maxTouchPoints > 0;
+
+// Determine match winner from scores
+const determineWinner = (s1, s2, match) => {
+  if (s1 > s2) return match.team1Id;
+  if (s2 > s1) return match.team2Id;
+  return 'draw';
+};
 
 // Haptic feedback helper
 const triggerHaptic = (pattern) => {
@@ -15,7 +23,7 @@ const triggerHaptic = (pattern) => {
 
 // Confetti helper
 const triggerConfetti = () => {
-  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const prefersReducedMotion = globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (prefersReducedMotion) return;
 
   const overlay = document.createElement('div');
@@ -36,7 +44,7 @@ const triggerConfetti = () => {
   }
 
   setTimeout(() => {
-    document.body.removeChild(overlay);
+    overlay.remove();
   }, 3500);
 };
 
@@ -54,6 +62,7 @@ export default function MonoGoalsLiveScore() {
   const [score2, setScore2] = useState(0);
   const [history, setHistory] = useState([]);
   const [hasChanges, setHasChanges] = useState(false);
+  const [sidesSwapped, setSidesSwapped] = useState(false);
 
   // Timer for timed mode
   const timer = useTimer();
@@ -61,6 +70,7 @@ export default function MonoGoalsLiveScore() {
 
   // Debounce ref for rapid clicks
   const lastClickRef = useRef(0);
+  const isKnockoutRef = useRef(false);
   // Track current scores for history snapshots
   const score1Ref = useRef(score1);
   const score2Ref = useRef(score2);
@@ -76,7 +86,11 @@ export default function MonoGoalsLiveScore() {
     const found = tournaments.find(t => t.id === Number(id));
     if (!found) return;
 
-    const foundMatch = found.matches.find(m => m.id === matchId);
+    let foundMatch = found.matches.find(m => m.id === matchId);
+    if (!foundMatch) {
+      foundMatch = (found.knockoutMatches || []).find(m => m.id === matchId);
+      if (foundMatch) isKnockoutRef.current = true;
+    }
     if (!foundMatch) return;
 
     setSportConfig(config);
@@ -97,11 +111,16 @@ export default function MonoGoalsLiveScore() {
     }
   }, [sport, id, matchId]);
 
+  // Effective format: use knockout format for knockout matches
+  const effectiveFormat = isKnockoutRef.current && tournament?.knockoutConfig?.format
+    ? tournament.knockoutConfig.format
+    : tournament?.format;
+
   // Start timer for timed mode
   useEffect(() => {
     if (!tournament || !timerStarted) return;
-    const formatMode = tournament.format?.mode;
-    if (formatMode === 'timed' && tournament.format?.timeLimit) {
+    const formatMode = effectiveFormat?.mode;
+    if (formatMode === 'timed' && effectiveFormat?.timeLimit) {
       timer.start();
     }
   }, [tournament, timerStarted]);
@@ -109,8 +128,8 @@ export default function MonoGoalsLiveScore() {
   // Auto-end match when time expires in timed mode
   useEffect(() => {
     if (!tournament || !sportConfig) return;
-    const formatMode = tournament.format?.mode;
-    const timeLimit = tournament.format?.timeLimit;
+    const formatMode = effectiveFormat?.mode;
+    const timeLimit = effectiveFormat?.timeLimit;
 
     if (formatMode === 'timed' && timeLimit && timer.elapsed >= timeLimit) {
       // Time's up - auto-save match
@@ -118,22 +137,15 @@ export default function MonoGoalsLiveScore() {
       triggerHaptic([100, 100, 100, 100, 100]);
 
       setTimeout(() => {
-        const updatedMatches = tournament.matches.map(m =>
-          m.id === matchId
-            ? {
-                ...m,
-                score1,
-                score2,
-                status: 'completed',
-                winner: score1 > score2 ? m.team1Id : score2 > score1 ? m.team2Id : 'draw',
-                draftState: undefined,
-              }
-            : m
-        );
-        saveSportTournament(sportConfig.storageKey, {
-          ...tournament,
-          matches: updatedMatches,
-        });
+        const updatedTournament = updateMatchInTournament(tournament, matchId, m => ({
+          ...m,
+          score1,
+          score2,
+          status: 'completed',
+          winner: determineWinner(score1, score2, m),
+          draftState: undefined,
+        }));
+        saveSportTournament(sportConfig.storageKey, updatedTournament);
         navigate(`/${sport}/tournament/${id}`);
       }, 300);
     }
@@ -144,8 +156,8 @@ export default function MonoGoalsLiveScore() {
     if (!sportConfig || !tournament) return;
 
     // Check if time is up in timed mode
-    const formatMode = tournament.format?.mode;
-    const timeLimit = tournament.format?.timeLimit;
+    const formatMode = effectiveFormat?.mode;
+    const timeLimit = effectiveFormat?.timeLimit;
     if (formatMode === 'timed' && timeLimit && timer.elapsed >= timeLimit) {
       return; // Don't allow scoring after time expires
     }
@@ -184,29 +196,22 @@ export default function MonoGoalsLiveScore() {
     }
 
     // Auto-end in points mode (formatMode already declared above)
-    if ((formatMode || 'free') === 'points' && tournament.format.target) {
-      if (newScore1 >= tournament.format.target || newScore2 >= tournament.format.target) {
+    if ((formatMode || 'free') === 'points' && effectiveFormat.target) {
+      if (newScore1 >= effectiveFormat.target || newScore2 >= effectiveFormat.target) {
         triggerConfetti();
         triggerHaptic([100, 100, 100, 100, 100]);
 
         // Save match as completed
         setTimeout(() => {
-          const updatedMatches = tournament.matches.map(m =>
-            m.id === matchId
-              ? {
-                  ...m,
-                  score1: newScore1,
-                  score2: newScore2,
-                  status: 'completed',
-                  winner: newScore1 > newScore2 ? m.team1Id : newScore2 > newScore1 ? m.team2Id : 'draw',
-                  draftState: undefined,
-                }
-              : m
-          );
-          saveSportTournament(sportConfig.storageKey, {
-            ...tournament,
-            matches: updatedMatches,
-          });
+          const updatedTournament = updateMatchInTournament(tournament, matchId, m => ({
+            ...m,
+            score1: newScore1,
+            score2: newScore2,
+            status: 'completed',
+            winner: determineWinner(newScore1, newScore2, m),
+            draftState: undefined,
+          }));
+          saveSportTournament(sportConfig.storageKey, updatedTournament);
           navigate(`/${sport}/tournament/${id}`);
         }, 300);
       }
@@ -225,25 +230,18 @@ export default function MonoGoalsLiveScore() {
 
   // Save draft (in-progress match)
   const saveDraft = () => {
-    const updatedMatches = tournament.matches.map(m =>
-      m.id === matchId
-        ? {
-            ...m,
-            status: 'in-progress',
-            draftState: {
-              score1,
-              score2,
-              history: JSON.parse(JSON.stringify(history.slice(-50))),
-              savedAt: new Date().toISOString(),
-            },
-          }
-        : m
-    );
+    const updatedTournament = updateMatchInTournament(tournament, matchId, m => ({
+      ...m,
+      status: 'in-progress',
+      draftState: {
+        score1,
+        score2,
+        history: structuredClone(history.slice(-50)),
+        savedAt: new Date().toISOString(),
+      },
+    }));
 
-    saveSportTournament(sportConfig.storageKey, {
-      ...tournament,
-      matches: updatedMatches,
-    });
+    saveSportTournament(sportConfig.storageKey, updatedTournament);
 
     setHasChanges(false);
     alert('Draft saved! You can resume this match later.');
@@ -260,10 +258,10 @@ export default function MonoGoalsLiveScore() {
 
       switch (e.key.toLowerCase()) {
         case 'q':
-          addScore(1, 1);
+          addScore(leftTeam, 1);
           break;
         case 'p':
-          addScore(2, 1);
+          addScore(rightTeam, 1);
           break;
         case 'u':
           undo();
@@ -273,9 +271,9 @@ export default function MonoGoalsLiveScore() {
       }
     };
 
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [score1, score2, history, sportConfig, tournament]); // Dependencies for addScore/undo
+    globalThis.addEventListener('keydown', handleKeyPress);
+    return () => globalThis.removeEventListener('keydown', handleKeyPress);
+  }, [score1, score2, history, sportConfig, tournament, sidesSwapped]); // Dependencies for addScore/undo
 
   // Save match and return
   const saveMatch = () => {
@@ -291,23 +289,16 @@ export default function MonoGoalsLiveScore() {
       triggerHaptic([100, 100, 100, 100, 100]); // Victory pattern
     }
 
-    const updatedMatches = tournament.matches.map(m =>
-      m.id === matchId
-        ? {
-            ...m,
-            score1,
-            score2,
-            status: 'completed',
-            winner: score1 > score2 ? m.team1Id : score2 > score1 ? m.team2Id : 'draw',
-            draftState: undefined, // Clear draft state
-          }
-        : m
-    );
+    const updatedTournament = updateMatchInTournament(tournament, matchId, m => ({
+      ...m,
+      score1,
+      score2,
+      status: 'completed',
+      winner: determineWinner(score1, score2, m),
+      draftState: undefined,
+    }));
 
-    saveSportTournament(sportConfig.storageKey, {
-      ...tournament,
-      matches: updatedMatches,
-    });
+    saveSportTournament(sportConfig.storageKey, updatedTournament);
 
     // Delay navigation slightly to show confetti
     setTimeout(() => {
@@ -317,7 +308,7 @@ export default function MonoGoalsLiveScore() {
 
   // Cancel and return
   const handleCancel = () => {
-    if (hasChanges && !window.confirm('Discard unsaved changes?')) return;
+    if (hasChanges && !globalThis.confirm('Discard unsaved changes?')) return;
     navigate(`/${sport}/tournament/${id}`);
   };
 
@@ -335,9 +326,17 @@ export default function MonoGoalsLiveScore() {
   const team2Name = getTeamName(match.team2Id);
   const quickButtons = sportConfig.config.quickButtons;
 
+  // Side swap helpers
+  const leftTeam = sidesSwapped ? 2 : 1;
+  const rightTeam = sidesSwapped ? 1 : 2;
+  const leftName = sidesSwapped ? team2Name : team1Name;
+  const rightName = sidesSwapped ? team1Name : team2Name;
+  const leftScore = sidesSwapped ? score2 : score1;
+  const rightScore = sidesSwapped ? score1 : score2;
+
   // Timed mode helpers
-  const isTimedMode = tournament.format?.mode === 'timed';
-  const timeLimit = isTimedMode ? tournament.format.timeLimit : null;
+  const isTimedMode = effectiveFormat?.mode === 'timed';
+  const timeLimit = isTimedMode ? effectiveFormat.timeLimit : null;
   const remainingSeconds = isTimedMode && timeLimit ? Math.max(0, timeLimit - timer.elapsed) : null;
   const isTimeUp = isTimedMode && remainingSeconds === 0;
 
@@ -359,15 +358,33 @@ export default function MonoGoalsLiveScore() {
           >
             ← Back
           </button>
-          {isTimedMode ? (
-            <span className={`mono-badge ${isTimeUp ? 'mono-badge-paused' : 'mono-badge-live'}`} style={{ color: isTimeUp ? '#dc2626' : undefined }}>
-              {isTimeUp ? "Time's up!" : formatCountdown(remainingSeconds)}
-            </span>
-          ) : (
-            <span className="mono-badge mono-badge-live">
-              {tournament.format?.mode === 'points' ? `First to ${tournament.format.target}` : 'Live Scoring'}
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => { setSidesSwapped(s => !s); }}
+              className="mono-btn"
+              style={{
+                padding: '6px 12px',
+                fontSize: '0.75rem',
+                minWidth: 0,
+                touchAction: 'manipulation',
+                borderColor: sidesSwapped ? '#0066ff' : '#ddd',
+                color: sidesSwapped ? '#0066ff' : '#111',
+              }}
+              title="Swap sides"
+            >
+              Swap
+            </button>
+            {isTimedMode ? (
+              <span className={`mono-badge ${isTimeUp ? 'mono-badge-paused' : 'mono-badge-live'}`} style={{ color: isTimeUp ? '#dc2626' : undefined }}>
+                {isTimeUp ? "Time's up!" : formatCountdown(remainingSeconds)}
+              </span>
+            ) : (
+              <span className="mono-badge mono-badge-live">
+                {effectiveFormat?.mode === 'points' ? `First to ${effectiveFormat.target}` : 'Live Scoring'}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* ARIA live region for score announcements */}
@@ -377,23 +394,23 @@ export default function MonoGoalsLiveScore() {
           aria-atomic="true"
           className="sr-only"
         >
-          {team1Name}: {score1}. {team2Name}: {score2}.
+          {leftName}: {leftScore}. {rightName}: {rightScore}.
         </div>
 
         {/* Score cards - side by side */}
         <div className="flex items-stretch gap-4 mb-8" style={{ minHeight: '280px' }}>
-          {/* Team 1 Card */}
+          {/* Left Team Card */}
           <div
             className="flex-1 flex flex-col items-center justify-center mono-card"
             style={{ padding: '24px 16px' }}
             role="region"
-            aria-label={`${team1Name} scoring`}
+            aria-label={`${leftName} scoring`}
           >
             <p className="text-xs uppercase tracking-widest mb-4" style={{ color: '#888' }}>
-              {team1Name}
+              {leftName}
             </p>
-            <p className="text-6xl font-bold font-mono mono-score mb-4" style={{ color: '#111' }} aria-label={`${team1Name} score: ${score1}`}>
-              {score1}
+            <p className="text-6xl font-bold font-mono mono-score mb-4" style={{ color: '#111' }} aria-label={`${leftName} score: ${leftScore}`}>
+              {leftScore}
             </p>
 
             {/* Quick buttons or simple +1 */}
@@ -402,22 +419,22 @@ export default function MonoGoalsLiveScore() {
                 quickButtons.map((btn, idx) => (
                   <button
                     key={idx}
-                    onClick={() => addScore(1, btn.value)}
+                    onClick={() => addScore(leftTeam, btn.value)}
                     className="mono-btn text-sm py-2"
                     style={{ touchAction: 'manipulation', opacity: isTimeUp ? 0.4 : 1 }}
                     disabled={isTimeUp}
-                    aria-label={`Add ${btn.value} ${btn.value === 1 ? 'point' : 'points'} to ${team1Name}`}
+                    aria-label={`Add ${btn.value} ${btn.value === 1 ? 'point' : 'points'} to ${leftName}`}
                   >
                     {btn.label}
                   </button>
                 ))
               ) : (
                 <button
-                  onClick={() => addScore(1, 1)}
+                  onClick={() => addScore(leftTeam, 1)}
                   className="mono-btn-primary text-lg py-3"
                   style={{ touchAction: 'manipulation', opacity: isTimeUp ? 0.4 : 1 }}
                   disabled={isTimeUp}
-                  aria-label={`Add 1 point to ${team1Name}`}
+                  aria-label={`Add 1 point to ${leftName}`}
                 >
                   + 1
                 </button>
@@ -425,18 +442,18 @@ export default function MonoGoalsLiveScore() {
             </div>
           </div>
 
-          {/* Team 2 Card */}
+          {/* Right Team Card */}
           <div
             className="flex-1 flex flex-col items-center justify-center mono-card"
             style={{ padding: '24px 16px' }}
             role="region"
-            aria-label={`${team2Name} scoring`}
+            aria-label={`${rightName} scoring`}
           >
             <p className="text-xs uppercase tracking-widest mb-4" style={{ color: '#888' }}>
-              {team2Name}
+              {rightName}
             </p>
-            <p className="text-6xl font-bold font-mono mono-score mb-4" style={{ color: '#111' }} aria-label={`${team2Name} score: ${score2}`}>
-              {score2}
+            <p className="text-6xl font-bold font-mono mono-score mb-4" style={{ color: '#111' }} aria-label={`${rightName} score: ${rightScore}`}>
+              {rightScore}
             </p>
 
             {/* Quick buttons or simple +1 */}
@@ -445,22 +462,22 @@ export default function MonoGoalsLiveScore() {
                 quickButtons.map((btn, idx) => (
                   <button
                     key={idx}
-                    onClick={() => addScore(2, btn.value)}
+                    onClick={() => addScore(rightTeam, btn.value)}
                     className="mono-btn text-sm py-2"
                     style={{ touchAction: 'manipulation', opacity: isTimeUp ? 0.4 : 1 }}
                     disabled={isTimeUp}
-                    aria-label={`Add ${btn.value} ${btn.value === 1 ? 'point' : 'points'} to ${team2Name}`}
+                    aria-label={`Add ${btn.value} ${btn.value === 1 ? 'point' : 'points'} to ${rightName}`}
                   >
                     {btn.label}
                   </button>
                 ))
               ) : (
                 <button
-                  onClick={() => addScore(2, 1)}
+                  onClick={() => addScore(rightTeam, 1)}
                   className="mono-btn-primary text-lg py-3"
                   style={{ touchAction: 'manipulation', opacity: isTimeUp ? 0.4 : 1 }}
                   disabled={isTimeUp}
-                  aria-label={`Add 1 point to ${team2Name}`}
+                  aria-label={`Add 1 point to ${rightName}`}
                 >
                   + 1
                 </button>
@@ -472,39 +489,38 @@ export default function MonoGoalsLiveScore() {
         {/* Info */}
         <p className="text-xs text-center mb-2" style={{ color: '#bbb' }}>
           {isTimedMode ? `${Math.floor(timeLimit / 60)} min match` :
-           tournament.format?.mode === 'points' ? `First to ${tournament.format.target}` : 'Free play'}
+           effectiveFormat?.mode === 'points' ? `First to ${effectiveFormat.target}` : 'Free play'}
           {' · '}
           {sportConfig.config.drawAllowed ? 'Draws allowed' : 'No draws'}
         </p>
         {!isTouchDevice && (
           <p className="text-xs text-center mb-6" style={{ color: '#ccc' }}>
-            Keyboard: Q = {team1Name} &middot; P = {team2Name} &middot; U = Undo
+            Keyboard: Q = {leftName} &middot; P = {rightName} &middot; U = Undo
           </p>
         )}
 
         {/* Bottom bar */}
-        <div className="flex justify-between items-center pt-4" style={{ borderTop: '1px solid #eee' }}>
-          <button
-            onClick={undo}
-            disabled={history.length === 0}
-            className="mono-btn"
-            style={{ opacity: history.length === 0 ? 0.4 : 1, touchAction: 'manipulation' }}
-          >
-            Undo
+        <div className="pt-4" style={{ borderTop: '1px solid #eee' }}>
+          <button onClick={saveMatch} className="mono-btn-primary w-full mb-3" style={{ padding: '12px', fontSize: '0.875rem' }}>
+            Save &amp; Return
           </button>
-
-          <div className="flex gap-3">
-            <button onClick={handleCancel} className="mono-btn">
+          <div className="flex gap-2">
+            <button
+              onClick={undo}
+              disabled={history.length === 0}
+              className="mono-btn flex-1"
+              style={{ padding: '8px', fontSize: '0.8125rem', opacity: history.length === 0 ? 0.4 : 1, touchAction: 'manipulation' }}
+            >
+              Undo
+            </button>
+            <button onClick={handleCancel} className="mono-btn flex-1" style={{ padding: '8px', fontSize: '0.8125rem' }}>
               Cancel
             </button>
             {hasChanges && (
-              <button onClick={saveDraft} className="mono-btn" style={{ borderColor: '#0066ff', color: '#0066ff' }}>
+              <button onClick={saveDraft} className="mono-btn flex-1" style={{ padding: '8px', fontSize: '0.8125rem', borderColor: '#0066ff', color: '#0066ff' }}>
                 Save Draft
               </button>
             )}
-            <button onClick={saveMatch} className="mono-btn-primary">
-              Save & Return
-            </button>
           </div>
         </div>
       </div>

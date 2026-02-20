@@ -3,6 +3,58 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { loadVolleyballTournaments, saveVolleyballTournament } from '../../utils/storage';
 import { validateSingleSetScore } from '../../utils/volleyballCalculations';
 
+function getDiffColor(diff) {
+  if (diff > 0) return '#16a34a';
+  if (diff < 0) return '#dc2626';
+  return '#888';
+}
+
+function MatchScoringForm({ t1Name, t2Name, tempScore1, tempScore2, setTempScore1, setTempScore2, scoreError, setScoreError, saveScore, onCancel }) {
+  return (
+    <div style={{ padding: '16px 20px' }}>
+      <div className="flex items-center gap-3 mb-3">
+        <span className="flex-1 text-right text-sm font-medium" style={{ color: '#111' }}>
+          {t1Name}
+        </span>
+        <input
+          type="number"
+          min="0"
+          max="99"
+          className="mono-input"
+          style={{ width: '60px', textAlign: 'center', fontSize: '1.125rem', fontWeight: 700 }}
+          value={tempScore1}
+          onChange={e => { setTempScore1(e.target.value); setScoreError(''); }}
+          autoFocus
+        />
+        <span style={{ color: '#ccc' }}>:</span>
+        <input
+          type="number"
+          min="0"
+          max="99"
+          className="mono-input"
+          style={{ width: '60px', textAlign: 'center', fontSize: '1.125rem', fontWeight: 700 }}
+          value={tempScore2}
+          onChange={e => { setTempScore2(e.target.value); setScoreError(''); }}
+        />
+        <span className="flex-1 text-sm font-medium" style={{ color: '#111' }}>
+          {t2Name}
+        </span>
+      </div>
+      {scoreError && (
+        <p className="text-xs mb-3 text-center" style={{ color: '#dc2626' }}>{scoreError}</p>
+      )}
+      <div className="flex gap-2">
+        <button onClick={saveScore} className="mono-btn-primary flex-1" style={{ padding: '10px' }}>
+          Save
+        </button>
+        <button onClick={onCancel} className="mono-btn flex-1" style={{ padding: '10px' }}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function MonoVolleyballTournament() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -133,32 +185,51 @@ export default function MonoVolleyballTournament() {
   return (
     <div className={`min-h-screen px-6 py-10 mono-transition ${visible ? 'mono-visible' : 'mono-hidden'}`}>
       <div className="max-w-2xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center gap-2 mb-2">
-          <button
-            onClick={() => navigate('/volleyball/tournament')}
-            className="text-sm bg-transparent border-none cursor-pointer font-swiss"
-            style={{ color: '#888' }}
-          >
-            \u2190 Tournaments
-          </button>
-        </div>
+        {/* Back */}
+        <button
+          onClick={() => navigate('/volleyball/tournament')}
+          className="flex items-center gap-1 text-sm mb-6"
+          style={{ color: '#888' }}
+        >
+          <span>←</span>
+          <span>Tournaments</span>
+        </button>
 
-        <div className="flex items-center justify-between mb-2">
+        {/* Title row */}
+        <div className="flex items-center gap-3 mb-1">
           <h1 className="text-xl font-semibold tracking-tight" style={{ color: '#111' }}>
             {tournament.name}
           </h1>
-          <span className="mono-badge mono-badge-live">
-            {completedMatches}/{totalMatches}
+          <span className={`mono-badge ${completedMatches === totalMatches ? 'mono-badge-final' : 'mono-badge-live'}`}>
+            {completedMatches === totalMatches ? 'Complete' : 'Live'}
           </span>
         </div>
 
-        <p className="text-xs mb-8" style={{ color: '#888' }}>
-          First to {target} &middot; {tournament.teams.length} teams &middot; Round Robin
+        {/* Meta */}
+        <p className="text-xs mb-5" style={{ color: '#888' }}>
+          First to {target} · {tournament.teams.length} teams · Round Robin
         </p>
 
+        {/* Match progress segments */}
+        <div className="flex items-center gap-3 mb-5">
+          <div className="flex items-center gap-1">
+            {tournament.matches.map((m, i) => (
+              <div
+                key={m.id || i}
+                title={`Match: ${getTeamName(m.team1Id ?? m.team1)} vs ${getTeamName(m.team2Id ?? m.team2)}`}
+                style={{
+                  width: 18, height: 6,
+                  background: ((m.score1 !== null && m.score1 !== undefined) || m.status === 'completed') ? '#0066ff' : '#e5e5e5',
+                  transition: 'background 0.2s ease',
+                }}
+              />
+            ))}
+          </div>
+          <span className="text-xs font-mono" style={{ color: '#888' }}>{completedMatches}/{totalMatches}</span>
+        </div>
+
         {/* Tabs */}
-        <div className="flex gap-0 mb-8" style={{ borderBottom: '1px solid #eee' }}>
+        <div className="flex gap-0 mb-6" style={{ borderBottom: '1px solid #eee' }}>
           {tabs.map(t => (
             <button
               key={t.id}
@@ -203,47 +274,18 @@ export default function MonoVolleyballTournament() {
                   </div>
 
                   {scoringMatch === idx ? (
-                    <div style={{ padding: '16px 20px' }}>
-                      <div className="flex items-center gap-3 mb-3">
-                        <span className="flex-1 text-right text-sm font-medium" style={{ color: '#111' }}>
-                          {t1Name}
-                        </span>
-                        <input
-                          type="number"
-                          min="0"
-                          max="99"
-                          className="mono-input"
-                          style={{ width: '60px', textAlign: 'center', fontSize: '1.125rem', fontWeight: 700 }}
-                          value={tempScore1}
-                          onChange={e => { setTempScore1(e.target.value); setScoreError(''); }}
-                          autoFocus
-                        />
-                        <span style={{ color: '#ccc' }}>:</span>
-                        <input
-                          type="number"
-                          min="0"
-                          max="99"
-                          className="mono-input"
-                          style={{ width: '60px', textAlign: 'center', fontSize: '1.125rem', fontWeight: 700 }}
-                          value={tempScore2}
-                          onChange={e => { setTempScore2(e.target.value); setScoreError(''); }}
-                        />
-                        <span className="flex-1 text-sm font-medium" style={{ color: '#111' }}>
-                          {t2Name}
-                        </span>
-                      </div>
-                      {scoreError && (
-                        <p className="text-xs mb-3 text-center" style={{ color: '#dc2626' }}>{scoreError}</p>
-                      )}
-                      <div className="flex gap-2">
-                        <button onClick={saveScore} className="mono-btn-primary flex-1" style={{ padding: '10px' }}>
-                          Save
-                        </button>
-                        <button onClick={() => setScoringMatch(null)} className="mono-btn flex-1" style={{ padding: '10px' }}>
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
+                    <MatchScoringForm
+                      t1Name={t1Name}
+                      t2Name={t2Name}
+                      tempScore1={tempScore1}
+                      tempScore2={tempScore2}
+                      setTempScore1={setTempScore1}
+                      setTempScore2={setTempScore2}
+                      scoreError={scoreError}
+                      setScoreError={setScoreError}
+                      saveScore={saveScore}
+                      onCancel={() => setScoringMatch(null)}
+                    />
                   ) : (
                     <div
                       onClick={() => openScoring(idx)}
@@ -251,7 +293,7 @@ export default function MonoVolleyballTournament() {
                       style={{ padding: '16px 20px' }}
                     >
                       <div className="flex items-center">
-                        <span className="flex-1 text-right text-sm font-medium" style={{ color: t1Wins ? '#111' : isComplete ? '#bbb' : '#111' }}>
+                        <span className="flex-1 text-right text-sm font-medium" style={{ color: (t1Wins || !isComplete) ? '#111' : '#bbb' }}>
                           {t1Name}
                         </span>
                         <div className="mx-4 text-center" style={{ minWidth: '60px' }}>
@@ -265,7 +307,7 @@ export default function MonoVolleyballTournament() {
                             <span className="text-xs" style={{ color: '#ccc' }}>vs</span>
                           )}
                         </div>
-                        <span className="flex-1 text-sm font-medium" style={{ color: t2Wins ? '#111' : isComplete ? '#bbb' : '#111' }}>
+                        <span className="flex-1 text-sm font-medium" style={{ color: (t2Wins || !isComplete) ? '#111' : '#bbb' }}>
                           {t2Name}
                         </span>
                       </div>
@@ -305,7 +347,7 @@ export default function MonoVolleyballTournament() {
                       <td className="text-center font-mono" style={{ color: '#888', padding: '12px 6px' }}>{row.pointsFor}</td>
                       <td className="text-center font-mono" style={{ color: '#888', padding: '12px 6px' }}>{row.pointsAgainst}</td>
                       <td className="text-center font-mono" style={{
-                        color: row.diff > 0 ? '#16a34a' : row.diff < 0 ? '#dc2626' : '#888',
+                        color: getDiffColor(row.diff),
                         padding: '12px 16px 12px 6px',
                       }}>
                         {row.diff > 0 ? '+' : ''}{row.diff}

@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { loadCricketTournaments, saveCricketTournament } from '../../../utils/storage';
-import { ballsToOvers, calculateRunRate } from '../../../utils/cricketCalculations';
+import { loadSportTournaments, saveSportTournament } from '../../../utils/storage';
+import { ballsToOvers, calculateRunRate, getPowerplayPhase, getMaxWickets, getTotalBalls, getCricketFormat } from '../../../utils/cricketCalculations';
+import { migrateCricketFormat } from '../../../utils/formatMigration';
+import { getSportById } from '../../../models/sportRegistry';
+import { updateMatchInTournament } from '../../../utils/knockoutManager';
 
-const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+const isTouchDevice = 'ontouchstart' in globalThis || navigator.maxTouchPoints > 0;
 
 // Haptic feedback helper
 const triggerHaptic = (pattern) => {
@@ -14,7 +17,7 @@ const triggerHaptic = (pattern) => {
 
 // Confetti helper
 const triggerConfetti = () => {
-  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const prefersReducedMotion = globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (prefersReducedMotion) return;
 
   const overlay = document.createElement('div');
@@ -35,21 +38,23 @@ const triggerConfetti = () => {
   }
 
   setTimeout(() => {
-    document.body.removeChild(overlay);
+    overlay.remove();
   }, 3500);
 };
 
 export default function MonoCricketLiveScore() {
   const navigate = useNavigate();
-  const { id, matchId } = useParams();
+  const { sport, id, matchId } = useParams();
+  const sportConfig = getSportById(sport || 'cricket');
 
   // Core state
   const [tournament, setTournament] = useState(null);
   const [match, setMatch] = useState(null);
+  const [format, setFormat] = useState(null);
 
   // Scoring state
-  const [battingTeam, setBattingTeam] = useState(1); // 1 or 2
-  const [innings, setInnings] = useState(1); // 1 or 2
+  const [battingTeam, setBattingTeam] = useState(1);
+  const [innings, setInnings] = useState(1);
   const [scores, setScores] = useState({
     team1: { runs: 0, balls: 0, wickets: 0, allOut: false },
     team2: { runs: 0, balls: 0, wickets: 0, allOut: false },
@@ -57,20 +62,50 @@ export default function MonoCricketLiveScore() {
   const [history, setHistory] = useState([]);
   const [hasChanges, setHasChanges] = useState(false);
 
+  // Free hit state
+  const [freeHit, setFreeHit] = useState(false);
+
+  // Trial ball state (gully cricket)
+  const [trialBallUsed, setTrialBallUsed] = useState(false);
+
+  // Pending innings switch (replaces setTimeout hack)
+  const [pendingInningsSwitch, setPendingInningsSwitch] = useState(false);
+
+  // Super Over state
+  const [superOverPhase, setSuperOverPhase] = useState('inactive');
+  // States: 'inactive' → 'prompt' → 'team1_batting' → 'team2_batting' → 'result' → ('prompt')
+  const [superOver, setSuperOver] = useState({ team1: { runs: 0, balls: 0, wickets: 0 }, team2: { runs: 0, balls: 0, wickets: 0 } });
+
   // Debounce ref for rapid clicks
   const lastClickRef = useRef(0);
+  const isKnockoutRef = useRef(false);
 
   // Load tournament and match
   useEffect(() => {
-    const tournaments = loadCricketTournaments();
-    const found = tournaments.find(t => t.id === Number(id));
+    const storageKey = sportConfig?.storageKey || 'gamescore_cricket';
+    const tournaments = loadSportTournaments(storageKey);
+    const found = tournaments.find(t => t.id === Number(id) || t.id === id);
     if (!found) return;
 
-    const foundMatch = found.matches.find(m => m.id === matchId);
+    let foundMatch = found.matches.find(m => m.id === matchId || m.id === Number(matchId));
+    if (!foundMatch) {
+      foundMatch = (found.knockoutMatches || []).find(m => m.id === matchId || m.id === Number(matchId));
+      if (foundMatch) isKnockoutRef.current = true;
+    }
     if (!foundMatch) return;
 
     setTournament(found);
     setMatch(foundMatch);
+
+    // Use match-level format with fallback to knockout/tournament format (bug fix 9b)
+    const rawFormat = foundMatch.format || (isKnockoutRef.current && found.knockoutConfig?.format) || found.format || {};
+    const migratedFormat = migrateCricketFormat(rawFormat);
+    setFormat(migratedFormat);
+
+    // Initialize trial ball state
+    if (migratedFormat.trialBall) {
+      setTrialBallUsed(false);
+    }
 
     // Initialize from existing score if editing
     if (foundMatch.team1Score && !foundMatch.draftState) {
@@ -78,7 +113,6 @@ export default function MonoCricketLiveScore() {
         team1: { ...foundMatch.team1Score, wickets: foundMatch.team1Score.wickets || 0 },
         team2: { ...foundMatch.team2Score, wickets: foundMatch.team2Score.wickets || 0 },
       });
-      // If both innings played, set to innings 2
       if (foundMatch.team2Score && foundMatch.team2Score.balls > 0) {
         setInnings(2);
         setBattingTeam(2);
@@ -91,37 +125,64 @@ export default function MonoCricketLiveScore() {
       setBattingTeam(foundMatch.draftState.battingTeam);
       setInnings(foundMatch.draftState.innings);
       setHistory(foundMatch.draftState.history || []);
+      setFreeHit(foundMatch.draftState.freeHit || false);
+      setTrialBallUsed(foundMatch.draftState.trialBallUsed || false);
     }
-  }, [id, matchId]);
+  }, [id, matchId, sport]);
 
-  const totalBalls = tournament?.format?.overs ? tournament.format.overs * 6 : 12;
-  const maxWickets = (tournament?.format?.players || 11) - 1;
+  // Handle pending innings switch via useEffect (bug fix 9j)
+  useEffect(() => {
+    if (pendingInningsSwitch) {
+      setInnings(2);
+      setBattingTeam(battingTeam === 1 ? 2 : 1);
+      setFreeHit(false);
+      setPendingInningsSwitch(false);
+    }
+  }, [pendingInningsSwitch]);
+
+  // Derived values from format
+  const totalBalls = format ? getTotalBalls(format) : Infinity;
+  const maxWickets = format ? getMaxWickets(format) : 10;
+  const showOvers = !format || format.trackOvers !== false;
+  const formatPreset = format?.preset ? getCricketFormat(format.preset) : null;
+  const presetLabel = formatPreset?.name || (format?.preset === 'custom' ? 'Custom' : '');
+
+  // Powerplay
+  const currentOver = scores[`team${battingTeam}`]
+    ? Math.floor(scores[`team${battingTeam}`].balls / 6) + 1
+    : 1;
+  const powerplayPhase = format && showOvers ? getPowerplayPhase(format, currentOver) : null;
+
+  // Save history snapshot
+  const saveSnapshot = () => {
+    setHistory(prev => [...prev, {
+      timestamp: Date.now(),
+      scores: structuredClone(scores),
+      battingTeam,
+      innings,
+      freeHit,
+    }].slice(-100));
+    setHasChanges(true);
+  };
 
   // Add runs
   const addRuns = (runs) => {
-    if (!tournament) return;
+    if (!tournament || !format) return;
 
-    // Debounce rapid clicks
     const now = Date.now();
     if (now - lastClickRef.current < 150) return;
     lastClickRef.current = now;
 
-    // Haptic feedback: stronger pulse for 4s and 6s
     if (runs === 4 || runs === 6) {
-      triggerHaptic([50, 50, 50]); // Triple pulse for boundary
+      triggerHaptic([50, 50, 50]);
     } else {
-      triggerHaptic(50); // Single pulse for normal runs
+      triggerHaptic(50);
     }
 
-    // Save to history
-    setHistory(prev => [...prev, {
-      timestamp: Date.now(),
-      scores: JSON.parse(JSON.stringify(scores)),
-      battingTeam,
-      innings,
-    }].slice(-100));
+    saveSnapshot();
 
-    setHasChanges(true);
+    // Clear free hit after this delivery
+    if (freeHit) setFreeHit(false);
 
     const key = `team${battingTeam}`;
     setScores(prev => {
@@ -133,11 +194,7 @@ export default function MonoCricketLiveScore() {
       if (team.balls >= totalBalls) {
         team.allOut = false;
         if (innings === 1) {
-          // Switch to innings 2
-          setTimeout(() => {
-            setInnings(2);
-            setBattingTeam(battingTeam === 1 ? 2 : 1);
-          }, 100);
+          setPendingInningsSwitch(true);
         }
       }
 
@@ -145,7 +202,7 @@ export default function MonoCricketLiveScore() {
       if (innings === 2) {
         const target = battingTeam === 2 ? prev.team1.runs : prev.team2.runs;
         if (team.runs > target) {
-          // Team 2 wins by chase - don't switch innings, just complete
+          // Match won — handled by isMatchComplete
         }
       }
 
@@ -155,25 +212,17 @@ export default function MonoCricketLiveScore() {
 
   // Add wicket
   const addWicket = () => {
-    if (!tournament) return;
+    if (!tournament || !format) return;
 
-    // Debounce rapid clicks
     const now = Date.now();
     if (now - lastClickRef.current < 150) return;
     lastClickRef.current = now;
 
-    // Haptic feedback: double pulse for wicket
     triggerHaptic([80, 80, 80]);
+    saveSnapshot();
 
-    // Save to history
-    setHistory(prev => [...prev, {
-      timestamp: Date.now(),
-      scores: JSON.parse(JSON.stringify(scores)),
-      battingTeam,
-      innings,
-    }].slice(-100));
-
-    setHasChanges(true);
+    // Clear free hit after this delivery
+    if (freeHit) setFreeHit(false);
 
     const key = `team${battingTeam}`;
     setScores(prev => {
@@ -181,24 +230,15 @@ export default function MonoCricketLiveScore() {
       team.wickets += 1;
       team.balls += 1;
 
-      // Check if all out (10 wickets)
       if (team.wickets >= maxWickets) {
         team.allOut = true;
         if (innings === 1) {
-          // Switch to innings 2
-          setTimeout(() => {
-            setInnings(2);
-            setBattingTeam(battingTeam === 1 ? 2 : 1);
-          }, 100);
+          setPendingInningsSwitch(true);
         }
       } else if (team.balls >= totalBalls) {
-        // Balls exhausted
         team.allOut = false;
         if (innings === 1) {
-          setTimeout(() => {
-            setInnings(2);
-            setBattingTeam(battingTeam === 1 ? 2 : 1);
-          }, 100);
+          setPendingInningsSwitch(true);
         }
       }
 
@@ -206,39 +246,35 @@ export default function MonoCricketLiveScore() {
     });
   };
 
-  // Add extra (wide/no-ball)
+  // Add extra (wide/no-ball) — bug fix 9d: trigger free hit on no-ball
   const addExtra = (type) => {
-    if (!tournament) return;
+    if (!tournament || !format) return;
 
-    // Debounce rapid clicks
     const now = Date.now();
     if (now - lastClickRef.current < 150) return;
     lastClickRef.current = now;
 
-    // Haptic feedback: short pulse for extra
     triggerHaptic(30);
-
-    // Save to history
-    setHistory(prev => [...prev, {
-      timestamp: Date.now(),
-      scores: JSON.parse(JSON.stringify(scores)),
-      battingTeam,
-      innings,
-    }].slice(-100));
-
-    setHasChanges(true);
+    saveSnapshot();
 
     const key = `team${battingTeam}`;
-    setScores(prev => {
-      const team = { ...prev[key] };
-      team.runs += 1; // Wide/No-ball adds 1 run
-      // Wide/No-ball doesn't count as a ball
+    setScores(prev => ({
+      ...prev,
+      [key]: { ...prev[key], runs: prev[key].runs + 1 },
+    }));
 
-      return { ...prev, [key]: team };
-    });
+    // No ball triggers free hit if format supports it
+    if (type === 'noBall' && format.freeHit) {
+      setFreeHit(true);
+    }
   };
 
-  // Undo
+  // Skip trial ball (gully cricket)
+  const skipTrialBall = () => {
+    setTrialBallUsed(true);
+  };
+
+  // Undo — restores freeHit state (bug fix 9k)
   const undo = () => {
     if (history.length === 0) return;
 
@@ -246,131 +282,160 @@ export default function MonoCricketLiveScore() {
     setScores(last.scores);
     setBattingTeam(last.battingTeam);
     setInnings(last.innings);
+    setFreeHit(last.freeHit || false);
     setHistory(prev => prev.slice(0, -1));
   };
 
-  // Save draft (in-progress match)
-  const saveDraft = () => {
-    const updatedMatches = tournament.matches.map(m =>
-      m.id === matchId
-        ? {
-            ...m,
-            status: 'in-progress',
-            draftState: {
-              scores: JSON.parse(JSON.stringify(scores)),
-              battingTeam,
-              innings,
-              history: JSON.parse(JSON.stringify(history.slice(-50))),
-              savedAt: new Date().toISOString(),
-            },
-          }
-        : m
-    );
+  // Super Over scoring
+  const addSuperOverRuns = (runs) => {
+    const now = Date.now();
+    if (now - lastClickRef.current < 150) return;
+    lastClickRef.current = now;
 
-    saveCricketTournament({
-      ...tournament,
-      matches: updatedMatches,
+    const key = superOverPhase === 'team1_batting' ? 'team1' : 'team2';
+    setSuperOver(prev => {
+      const team = { ...prev[key] };
+      team.runs += runs;
+      team.balls += 1;
+
+      // Check if over done (6 balls or 2 wickets)
+      if (team.balls >= 6 || team.wickets >= 2) {
+        if (superOverPhase === 'team1_batting') {
+          setTimeout(() => setSuperOverPhase('team2_batting'), 300);
+        } else {
+          setTimeout(() => setSuperOverPhase('result'), 300);
+        }
+      }
+
+      return { ...prev, [key]: team };
     });
-
-    setHasChanges(false);
-    alert('Draft saved! You can resume this match later.');
-    navigate(`/cricket/tournament/${id}`);
   };
 
-  // Keyboard shortcuts (skip on touch-only devices)
+  const addSuperOverWicket = () => {
+    const now = Date.now();
+    if (now - lastClickRef.current < 150) return;
+    lastClickRef.current = now;
+
+    const key = superOverPhase === 'team1_batting' ? 'team1' : 'team2';
+    setSuperOver(prev => {
+      const team = { ...prev[key] };
+      team.wickets += 1;
+      team.balls += 1;
+
+      if (team.wickets >= 2 || team.balls >= 6) {
+        if (superOverPhase === 'team1_batting') {
+          setTimeout(() => setSuperOverPhase('team2_batting'), 300);
+        } else {
+          setTimeout(() => setSuperOverPhase('result'), 300);
+        }
+      }
+
+      return { ...prev, [key]: team };
+    });
+  };
+
+  const addSuperOverExtra = () => {
+    const key = superOverPhase === 'team1_batting' ? 'team1' : 'team2';
+    setSuperOver(prev => ({
+      ...prev,
+      [key]: { ...prev[key], runs: prev[key].runs + 1 },
+    }));
+  };
+
+  // Save draft
+  const saveDraft = () => {
+    const storageKey = sportConfig?.storageKey || 'gamescore_cricket';
+    const updatedTournament = updateMatchInTournament(tournament, matchId, m => ({
+      ...m,
+      status: 'in-progress',
+      draftState: {
+        scores: structuredClone(scores),
+        battingTeam,
+        innings,
+        history: structuredClone(history.slice(-50)),
+        freeHit,
+        trialBallUsed,
+        savedAt: new Date().toISOString(),
+      },
+    }));
+
+    saveSportTournament(storageKey, updatedTournament);
+    setHasChanges(false);
+    alert('Draft saved! You can resume this match later.');
+    navigate(`/${sport || 'cricket'}/tournament/${id}`);
+  };
+
+  // Keyboard shortcuts
   useEffect(() => {
-    if (!tournament) return;
+    if (!tournament || !format) return;
     if (isTouchDevice) return;
 
     const handleKeyPress = (e) => {
-      // Ignore if user is typing in an input
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-
-      // Ignore if match is complete
       if (isMatchComplete) return;
 
       const key = e.key.toLowerCase();
-
-      // Run buttons (0-6)
       if (['0', '1', '2', '3', '4', '6'].includes(key)) {
-        addRuns(parseInt(key));
-      }
-      // Wicket
-      else if (key === 'w') {
+        addRuns(Number.parseInt(key));
+      } else if (key === 'w') {
         addWicket();
-      }
-      // Extra (wide/no-ball)
-      else if (key === 'e') {
+      } else if (key === 'e') {
         addExtra('wide');
-      }
-      // Undo
-      else if (key === 'u') {
+      } else if (key === 'u') {
         undo();
       }
     };
 
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [scores, battingTeam, innings, history, tournament, isMatchComplete]); // Dependencies
+    globalThis.addEventListener('keydown', handleKeyPress);
+    return () => globalThis.removeEventListener('keydown', handleKeyPress);
+  }, [scores, battingTeam, innings, history, tournament, format, isMatchComplete]);
 
-  // Save match
-  const saveMatch = () => {
+  // Save match (complete)
+  const saveMatch = (winnerOverride) => {
     if (!tournament || !match) return;
 
-    // Trigger celebration for completed match
     if (scores.team1.balls > 0 || scores.team2.balls > 0) {
       triggerConfetti();
-      triggerHaptic([100, 100, 100, 100, 100]); // Victory pattern
+      triggerHaptic([100, 100, 100, 100, 100]);
     }
 
-    const updatedMatches = tournament.matches.map(m =>
-      m.id === matchId
-        ? {
-            ...m,
-            team1Score: {
-              runs: scores.team1.runs,
-              balls: scores.team1.balls,
-              wickets: scores.team1.wickets,
-              allOut: scores.team1.allOut,
-            },
-            team2Score: {
-              runs: scores.team2.runs,
-              balls: scores.team2.balls,
-              wickets: scores.team2.wickets,
-              allOut: scores.team2.allOut,
-            },
-            status: 'completed',
-            draftState: undefined, // Clear draft state
-          }
-        : m
-    );
+    const storageKey = sportConfig?.storageKey || 'gamescore_cricket';
 
-    saveCricketTournament({
-      ...tournament,
-      matches: updatedMatches,
-    });
+    // Determine winner
+    let winner = winnerOverride || null;
+    if (!winner) {
+      if (scores.team1.runs > scores.team2.runs) winner = match.team1Id;
+      else if (scores.team2.runs > scores.team1.runs) winner = match.team2Id;
+      else winner = 'tie';
+    }
 
-    // Delay navigation slightly to show confetti
-    setTimeout(() => {
-      navigate(`/cricket/tournament/${id}`);
-    }, 300);
+    const updatedTournament = updateMatchInTournament(tournament, matchId, m => ({
+      ...m,
+      team1Score: { runs: scores.team1.runs, balls: scores.team1.balls, wickets: scores.team1.wickets, allOut: scores.team1.allOut },
+      team2Score: { runs: scores.team2.runs, balls: scores.team2.balls, wickets: scores.team2.wickets, allOut: scores.team2.allOut },
+      winner,
+      superOver: superOverPhase !== 'inactive' ? superOver : undefined,
+      status: 'completed',
+      draftState: undefined,
+    }));
+
+    saveSportTournament(storageKey, updatedTournament);
+    setTimeout(() => navigate(`/${sport || 'cricket'}/tournament/${id}`), 300);
   };
 
   // Cancel
   const handleCancel = () => {
-    if (hasChanges && !window.confirm('Discard unsaved changes?')) return;
-    navigate(`/cricket/tournament/${id}`);
+    if (hasChanges && !globalThis.confirm('Discard unsaved changes?')) return;
+    navigate(`/${sport || 'cricket'}/tournament/${id}`);
   };
 
-  if (!tournament || !match) {
+  if (!tournament || !match || !format) {
     return <div className="min-h-screen px-6 py-10 flex items-center justify-center">
       <p style={{ color: '#888' }}>Loading...</p>
     </div>;
   }
 
-  const getTeamName = (teamId) => {
-    return tournament.teams.find(t => t.id === teamId)?.name || 'Unknown';
-  };
+  const getTeamName = (teamId) => tournament.teams.find(t => t.id === teamId)?.name || 'Unknown';
 
   const team1Name = getTeamName(match.team1Id);
   const team2Name = getTeamName(match.team2Id);
@@ -384,9 +449,158 @@ export default function MonoCricketLiveScore() {
     ? (battingTeam === 2 ? scores.team1.runs : scores.team2.runs)
     : null;
 
-  // Check if innings/match should be complete
   const isInningsComplete = currentScore.balls >= totalBalls || currentScore.wickets >= maxWickets;
+  const isTied = innings === 2 && isInningsComplete && scores.team1.runs === scores.team2.runs;
   const isMatchComplete = innings === 2 && (isInningsComplete || (target !== null && currentScore.runs > target));
+
+  // Check for tie and prompt super over
+  useEffect(() => {
+    if (isTied && superOverPhase === 'inactive' && format.totalInnings !== 4) {
+      setSuperOverPhase('prompt');
+    }
+  }, [isTied]);
+
+  // Last Man Stands indicator
+  const isLastMan = format.lastManStands && currentScore.wickets >= maxWickets - 1 && currentScore.wickets < maxWickets;
+
+  // Trial ball indicator
+  const showTrialBall = format.trialBall && !trialBallUsed && innings === 1 && currentScore.balls === 0;
+
+  // Super Over prompt
+  if (superOverPhase === 'prompt') {
+    return (
+      <div className="min-h-screen px-6 py-10">
+        <div className="max-w-2xl mx-auto text-center" style={{ paddingTop: '80px' }}>
+          <h2 className="text-2xl font-bold mb-4" style={{ color: '#111' }}>Match Tied!</h2>
+          <p className="text-sm mb-2" style={{ color: '#888' }}>
+            Both teams scored {scores.team1.runs}.
+          </p>
+          <p className="text-sm mb-8" style={{ color: '#888' }}>Play a Super Over?</p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => {
+                setSuperOver({ team1: { runs: 0, balls: 0, wickets: 0 }, team2: { runs: 0, balls: 0, wickets: 0 } });
+                setSuperOverPhase('team1_batting');
+              }}
+              className="mono-btn-primary"
+              style={{ padding: '12px 24px' }}
+            >
+              Super Over
+            </button>
+            <button
+              onClick={() => saveMatch('tie')}
+              className="mono-btn"
+              style={{ padding: '12px 24px' }}
+            >
+              Accept Tie
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Super Over scoring UI
+  if (superOverPhase === 'team1_batting' || superOverPhase === 'team2_batting') {
+    const soTeam = superOverPhase === 'team1_batting' ? 'team1' : 'team2';
+    const soName = superOverPhase === 'team1_batting' ? team1Name : team2Name;
+    const soScore = superOver[soTeam];
+    const soTarget = superOverPhase === 'team2_batting' ? superOver.team1.runs : null;
+    const soDone = soScore.balls >= 6 || soScore.wickets >= 2;
+
+    return (
+      <div className="min-h-screen px-6 py-10">
+        <div className="max-w-2xl mx-auto">
+          <div className="flex items-center justify-between mb-6">
+            <span className="text-sm" style={{ color: '#888' }}>Super Over</span>
+            <span className="mono-badge mono-badge-live">{soName} batting</span>
+          </div>
+
+          <div className="text-center mb-8">
+            <p className="text-xs uppercase tracking-widest mb-2" style={{ color: '#888' }}>{soName}</p>
+            <p className="text-6xl font-bold font-mono mono-score mb-2" style={{ color: '#111' }}>
+              {soScore.runs}<span style={{ color: '#bbb', fontSize: '0.5em' }}>/{soScore.wickets}</span>
+            </p>
+            <p className="text-sm font-mono" style={{ color: '#888' }}>
+              {soScore.balls}/6 balls · {2 - soScore.wickets} wickets left
+            </p>
+            {soTarget !== null && (
+              <p className="text-sm mt-2" style={{ color: '#0066ff' }}>
+                Target: {soTarget + 1} · Need {Math.max(0, soTarget + 1 - soScore.runs)} from {6 - soScore.balls} balls
+              </p>
+            )}
+          </div>
+
+          {!soDone && (
+            <>
+              <div className="flex flex-wrap gap-2 justify-center mb-4">
+                {[0, 1, 2, 3, 4, 6].map(r => (
+                  <button key={r} onClick={() => addSuperOverRuns(r)}
+                    className={r === 4 || r === 6 ? 'mono-btn-primary' : 'mono-btn'}
+                    style={{ width: '56px', height: '56px', fontSize: '1.25rem', fontWeight: 700, padding: 0, touchAction: 'manipulation' }}>
+                    {r}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2 justify-center mb-4">
+                <button onClick={addSuperOverExtra} className="mono-btn" style={{ padding: '10px 16px', fontSize: '0.8125rem', touchAction: 'manipulation' }}>
+                  Wide (+1)
+                </button>
+                <button onClick={addSuperOverExtra} className="mono-btn" style={{ padding: '10px 16px', fontSize: '0.8125rem', touchAction: 'manipulation' }}>
+                  No Ball (+1)
+                </button>
+              </div>
+              <button onClick={addSuperOverWicket} className="mono-btn w-full"
+                style={{ padding: '14px', fontSize: '0.9375rem', borderColor: '#dc2626', color: '#dc2626', touchAction: 'manipulation' }}>
+                Wicket
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Super Over result
+  if (superOverPhase === 'result') {
+    const soWinner = superOver.team1.runs > superOver.team2.runs ? match.team1Id
+      : superOver.team2.runs > superOver.team1.runs ? match.team2Id
+      : null;
+
+    if (!soWinner) {
+      // Still tied — offer another super over
+      return (
+        <div className="min-h-screen px-6 py-10">
+          <div className="max-w-2xl mx-auto text-center" style={{ paddingTop: '80px' }}>
+            <h2 className="text-2xl font-bold mb-4" style={{ color: '#111' }}>Super Over Tied!</h2>
+            <p className="text-sm mb-8" style={{ color: '#888' }}>
+              {team1Name}: {superOver.team1.runs}/{superOver.team1.wickets} · {team2Name}: {superOver.team2.runs}/{superOver.team2.wickets}
+            </p>
+            <div className="flex gap-3 justify-center">
+              <button onClick={() => {
+                setSuperOver({ team1: { runs: 0, balls: 0, wickets: 0 }, team2: { runs: 0, balls: 0, wickets: 0 } });
+                setSuperOverPhase('team1_batting');
+              }} className="mono-btn-primary" style={{ padding: '12px 24px' }}>
+                Another Super Over
+              </button>
+              <button onClick={() => saveMatch('tie')} className="mono-btn" style={{ padding: '12px 24px' }}>
+                Accept Tie
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Super Over decided
+    saveMatch(soWinner);
+    return null;
+  }
+
+  // Format display for overs/balls
+  const oversDisplay = showOvers
+    ? `${ballsToOvers(currentScore.balls)} ov${format.overs ? ' / ' + format.overs : ''}`
+    : `${currentScore.balls} balls${format.maxBalls ? ' / ' + format.maxBalls : ''}`;
 
   return (
     <div className="min-h-screen px-6 py-10">
@@ -398,12 +612,36 @@ export default function MonoCricketLiveScore() {
             className="text-sm bg-transparent border-none cursor-pointer font-swiss"
             style={{ color: '#888' }}
           >
-            ← Back
+            &larr; Back
           </button>
-          <span className={`mono-badge ${isMatchComplete ? 'mono-badge-final' : 'mono-badge-live'}`}>
-            Innings {innings}
-          </span>
+          <div className="flex items-center gap-2">
+            {presetLabel && (
+              <span className="mono-badge">{presetLabel}</span>
+            )}
+            <span className={`mono-badge ${isMatchComplete ? 'mono-badge-final' : 'mono-badge-live'}`}>
+              {isMatchComplete ? 'Completed' : `Innings ${innings}`}
+            </span>
+          </div>
         </div>
+
+        {/* Gully rule indicators */}
+        {format.oneTipOneHand && (
+          <p className="text-xs text-center mb-2" style={{ color: '#888' }}>One tip one hand active</p>
+        )}
+
+        {/* Trial ball banner */}
+        {showTrialBall && (
+          <div className="mono-card text-center mb-4" style={{ padding: '12px 16px', borderColor: '#0066ff' }}>
+            <p className="text-sm font-medium" style={{ color: '#0066ff' }}>Trial Ball — first delivery doesn't count</p>
+            <button
+              onClick={skipTrialBall}
+              className="mono-btn mt-2"
+              style={{ padding: '6px 16px', fontSize: '0.75rem', borderColor: '#0066ff', color: '#0066ff' }}
+            >
+              Skip (Trial)
+            </button>
+          </div>
+        )}
 
         {/* Batting team score */}
         <div className="text-center mb-8">
@@ -415,16 +653,37 @@ export default function MonoCricketLiveScore() {
             <span style={{ color: '#bbb', fontSize: '0.5em' }}>/{currentScore.wickets}</span>
           </p>
           <p className="text-sm font-mono mb-1" style={{ color: '#888' }}>
-            {ballsToOvers(currentScore.balls)} overs ({totalBalls / 6} max)
+            {oversDisplay} &middot; RR {currentScore.balls > 0 ? calculateRunRate(currentScore.runs, currentScore.balls).toFixed(2) : '0.00'}
           </p>
-          <p className="text-sm font-mono" style={{ color: '#888' }}>
-            Run Rate: {currentScore.balls > 0 ? calculateRunRate(currentScore.runs, currentScore.balls).toFixed(2) : '0.00'}
-          </p>
-          {target !== null && (
-            <p className="text-sm mt-2" style={{ color: '#0066ff' }}>
-              Target: {target + 1} · Need {Math.max(0, target + 1 - currentScore.runs)} from {totalBalls - currentScore.balls} balls
+
+          {/* Powerplay indicator */}
+          {powerplayPhase && (
+            <p className="text-xs mt-1" style={{ color: '#0066ff' }}>
+              {powerplayPhase.label} (Overs {powerplayPhase.start}-{powerplayPhase.end})
             </p>
           )}
+
+          {/* Last Man Stands */}
+          {isLastMan && (
+            <p className="text-xs mt-1 font-medium" style={{ color: '#ff6b00' }}>Last Man Batting</p>
+          )}
+
+          {/* Free Hit banner */}
+          {freeHit && (
+            <div className="mono-card mt-3 mb-1" style={{ padding: '8px 16px', borderColor: '#ff6b00', backgroundColor: '#fff8f0' }}>
+              <p className="text-sm font-bold" style={{ color: '#ff6b00' }}>FREE HIT</p>
+              <p className="text-xs" style={{ color: '#888' }}>Run Out Only</p>
+            </div>
+          )}
+
+          {/* Target line */}
+          {target !== null && (
+            <p className="text-sm mt-2" style={{ color: '#0066ff' }}>
+              Target: {target + 1} &middot; Need {Math.max(0, target + 1 - currentScore.runs)}
+              {totalBalls !== Infinity ? ` from ${totalBalls - currentScore.balls} balls` : ''}
+            </p>
+          )}
+
           {!isTouchDevice && (
             <p className="text-xs mt-3" style={{ color: '#ccc' }}>
               Keyboard: 0-6 = Runs &middot; W = Wicket &middot; E = Extra &middot; U = Undo
@@ -435,14 +694,14 @@ export default function MonoCricketLiveScore() {
         {/* Other team score */}
         <div className="mono-card text-center mb-8" style={{ padding: '12px 16px' }}>
           <p className="text-xs" style={{ color: '#888' }}>
-            {otherName}: {otherScore.runs}/{otherScore.wickets} ({ballsToOvers(otherScore.balls)} ov)
+            {otherName}: {otherScore.runs}/{otherScore.wickets}
+            {' '}({showOvers ? `${ballsToOvers(otherScore.balls)} ov` : `${otherScore.balls} balls`})
           </p>
         </div>
 
         {/* Scoring controls */}
         {!isMatchComplete && (
           <>
-            {/* Run buttons */}
             <div className="flex flex-wrap gap-2 justify-center mb-4">
               {[0, 1, 2, 3, 4, 6].map(r => (
                 <button
@@ -451,13 +710,8 @@ export default function MonoCricketLiveScore() {
                   disabled={isInningsComplete}
                   className={r === 4 || r === 6 ? 'mono-btn-primary' : 'mono-btn'}
                   style={{
-                    width: '56px',
-                    height: '56px',
-                    fontSize: '1.25rem',
-                    fontWeight: 700,
-                    padding: 0,
-                    opacity: isInningsComplete ? 0.5 : 1,
-                    touchAction: 'manipulation',
+                    width: '56px', height: '56px', fontSize: '1.25rem', fontWeight: 700, padding: 0,
+                    opacity: isInningsComplete ? 0.5 : 1, touchAction: 'manipulation',
                   }}
                 >
                   {r}
@@ -465,51 +719,21 @@ export default function MonoCricketLiveScore() {
               ))}
             </div>
 
-            {/* Extras */}
             <div className="flex gap-2 justify-center mb-4">
-              <button
-                onClick={() => addExtra('wide')}
-                disabled={isInningsComplete}
-                className="mono-btn"
-                style={{
-                  padding: '10px 16px',
-                  fontSize: '0.8125rem',
-                  opacity: isInningsComplete ? 0.5 : 1,
-                  touchAction: 'manipulation',
-                }}
-              >
-                Wide
+              <button onClick={() => addExtra('wide')} disabled={isInningsComplete} className="mono-btn"
+                style={{ padding: '10px 16px', fontSize: '0.8125rem', opacity: isInningsComplete ? 0.5 : 1, touchAction: 'manipulation' }}>
+                Wide (+1)
               </button>
-              <button
-                onClick={() => addExtra('noBall')}
-                disabled={isInningsComplete}
-                className="mono-btn"
-                style={{
-                  padding: '10px 16px',
-                  fontSize: '0.8125rem',
-                  opacity: isInningsComplete ? 0.5 : 1,
-                  touchAction: 'manipulation',
-                }}
-              >
-                No Ball
+              <button onClick={() => addExtra('noBall')} disabled={isInningsComplete} className="mono-btn"
+                style={{ padding: '10px 16px', fontSize: '0.8125rem', opacity: isInningsComplete ? 0.5 : 1, touchAction: 'manipulation' }}>
+                No Ball (+1)
               </button>
             </div>
 
-            {/* Wicket button */}
-            <button
-              onClick={addWicket}
-              disabled={isInningsComplete}
-              className="mono-btn w-full mb-4"
-              style={{
-                padding: '14px',
-                fontSize: '0.9375rem',
-                borderColor: '#dc2626',
-                color: '#dc2626',
-                opacity: isInningsComplete ? 0.5 : 1,
-                touchAction: 'manipulation',
-              }}
-            >
-              Wicket
+            <button onClick={addWicket} disabled={isInningsComplete} className="mono-btn w-full mb-4"
+              style={{ padding: '14px', fontSize: '0.9375rem', borderColor: '#dc2626', color: '#dc2626',
+                opacity: isInningsComplete ? 0.5 : 1, touchAction: 'manipulation' }}>
+              {freeHit ? 'Run Out Only' : 'Wicket'}
             </button>
           </>
         )}
@@ -517,38 +741,36 @@ export default function MonoCricketLiveScore() {
         {/* Innings complete message */}
         {isInningsComplete && !isMatchComplete && (
           <div className="text-center mb-6 py-4" style={{ borderTop: '1px solid #eee', borderBottom: '1px solid #eee' }}>
-            <p className="text-sm font-medium" style={{ color: '#0066ff' }}>
-              Innings {innings} Complete
-            </p>
+            <p className="text-sm font-medium" style={{ color: '#0066ff' }}>End of Innings</p>
             <p className="text-xs mt-1" style={{ color: '#888' }}>
-              {currentName}: {currentScore.runs}/{currentScore.wickets} ({ballsToOvers(currentScore.balls)})
+              {currentName}: {currentScore.runs}/{currentScore.wickets}
+              {' '}({showOvers ? ballsToOvers(currentScore.balls) : `${currentScore.balls} balls`})
             </p>
           </div>
         )}
 
         {/* Bottom bar */}
-        <div className="flex justify-between items-center pt-4" style={{ borderTop: '1px solid #eee' }}>
-          <button
-            onClick={undo}
-            disabled={history.length === 0}
-            className="mono-btn"
-            style={{ opacity: history.length === 0 ? 0.4 : 1, touchAction: 'manipulation' }}
-          >
-            Undo
+        <div className="pt-4" style={{ borderTop: '1px solid #eee' }}>
+          <button onClick={() => saveMatch()} className="mono-btn-primary w-full mb-3" style={{ padding: '12px', fontSize: '0.875rem' }}>
+            End Match
           </button>
-
-          <div className="flex gap-3">
-            <button onClick={handleCancel} className="mono-btn">
-              Cancel
+          <div className="flex gap-2">
+            <button
+              onClick={undo}
+              disabled={history.length === 0}
+              className="mono-btn flex-1"
+              style={{ padding: '8px', fontSize: '0.8125rem', opacity: history.length === 0 ? 0.4 : 1, touchAction: 'manipulation' }}
+            >
+              Undo
+            </button>
+            <button onClick={handleCancel} className="mono-btn flex-1" style={{ padding: '8px', fontSize: '0.8125rem' }}>
+              Discard
             </button>
             {hasChanges && (
-              <button onClick={saveDraft} className="mono-btn" style={{ borderColor: '#0066ff', color: '#0066ff' }}>
-                Save Draft
+              <button onClick={saveDraft} className="mono-btn flex-1" style={{ padding: '8px', fontSize: '0.8125rem', borderColor: '#0066ff', color: '#0066ff' }}>
+                Pause Match
               </button>
             )}
-            <button onClick={saveMatch} className="mono-btn-primary">
-              Save & Return
-            </button>
           </div>
         </div>
       </div>

@@ -113,9 +113,16 @@ export const SPORT_DEFAULTS = {
   // === CUSTOM CRICKET ===
   cricket: {
     formatMode: 'standard',
-    overs: 20, // T20 format
+    preset: 'T20',
+    overs: 20,
     players: 11,
-    solo: false, // Both sides bat (standard)
+    solo: false,
+    totalInnings: 2,
+    trackOvers: true,
+    freeHit: true,
+    powerplay: [{ start: 1, end: 6, label: 'Powerplay' }],
+    declaration: false,
+    followOn: false,
   },
 };
 

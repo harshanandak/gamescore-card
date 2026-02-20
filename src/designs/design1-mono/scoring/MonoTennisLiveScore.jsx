@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getSportById } from '../../../models/sportRegistry';
 import { loadSportTournaments, saveSportTournament } from '../../../utils/storage';
+import { updateMatchInTournament } from '../../../utils/knockoutManager';
 
 // Haptic feedback helper
 const triggerHaptic = (pattern) => {
@@ -12,7 +13,7 @@ const triggerHaptic = (pattern) => {
 
 // Confetti helper
 const triggerConfetti = () => {
-  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const prefersReducedMotion = globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (prefersReducedMotion) return;
 
   const overlay = document.createElement('div');
@@ -105,6 +106,7 @@ export default function MonoTennisLiveScore() {
   });
 
   const [hasChanges, setHasChanges] = useState(false);
+  const [sidesSwapped, setSidesSwapped] = useState(false);
 
   // Load tournament and match data
   useEffect(() => {
@@ -115,7 +117,8 @@ export default function MonoTennisLiveScore() {
     const found = tournaments.find(t => t.id === Number(id));
     if (!found) return;
 
-    const foundMatch = found.matches.find(m => m.id === matchId);
+    const foundMatch = found.matches.find(m => m.id === matchId)
+      || (found.knockoutMatches || []).find(m => m.id === matchId);
     if (!foundMatch) return;
 
     setSportConfig(config);
@@ -142,6 +145,10 @@ export default function MonoTennisLiveScore() {
   const team2 = tournament?.teams?.find(t => t.id === match?.team2Id);
   const team1Name = team1?.name || 'Team 1';
   const team2Name = team2?.name || 'Team 2';
+
+  // Side swap helpers
+  const leftName = sidesSwapped ? team2Name : team1Name;
+  const rightName = sidesSwapped ? team1Name : team2Name;
 
   // Check if set is complete
   const isSetComplete = (set) => {
@@ -199,7 +206,7 @@ export default function MonoTennisLiveScore() {
     // Save history for undo
     setHistory(prev => [...prev, {
       timestamp: Date.now(),
-      sets: JSON.parse(JSON.stringify(sets)),
+      sets: structuredClone(sets),
       currentSet,
     }].slice(-100)); // Keep last 100 actions
 
@@ -340,7 +347,7 @@ export default function MonoTennisLiveScore() {
   // Keyboard shortcuts (desktop only)
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   useEffect(() => {
-    const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    const hasTouch = 'ontouchstart' in globalThis || navigator.maxTouchPoints > 0;
     setIsTouchDevice(hasTouch);
   }, []);
 
@@ -350,10 +357,10 @@ export default function MonoTennisLiveScore() {
     const handleKeyPress = (e) => {
       switch (e.key.toLowerCase()) {
         case 'q':
-          addPoint(1);
+          addPoint(leftTeam);
           break;
         case 'p':
-          addPoint(2);
+          addPoint(rightTeam);
           break;
         case 'u':
           undo();
@@ -361,29 +368,25 @@ export default function MonoTennisLiveScore() {
       }
     };
 
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [currentSet, sets, history, sportConfig, tournament]);
+    globalThis.addEventListener('keydown', handleKeyPress);
+    return () => globalThis.removeEventListener('keydown', handleKeyPress);
+  }, [currentSet, sets, history, sportConfig, tournament, sidesSwapped]);
 
   // Save draft
   const saveDraft = () => {
-    const updatedMatches = tournament.matches.map(m =>
-      m.id === matchId
-        ? {
-            ...m,
-            sets,
-            status: 'in-progress',
-            draftState: {
-              currentSet,
-              sets,
-              history,
-              savedAt: new Date().toISOString(),
-            },
-          }
-        : m
-    );
+    const updatedTournament = updateMatchInTournament(tournament, matchId, m => ({
+      ...m,
+      sets,
+      status: 'in-progress',
+      draftState: {
+        currentSet,
+        sets,
+        history,
+        savedAt: new Date().toISOString(),
+      },
+    }));
 
-    saveSportTournament(sportConfig.storageKey, { ...tournament, matches: updatedMatches });
+    saveSportTournament(sportConfig.storageKey, updatedTournament);
     alert('Draft saved! You can resume this match later.');
     navigate(`/design1/${tournament.sportId}/tournament`);
   };
@@ -410,33 +413,31 @@ export default function MonoTennisLiveScore() {
       }
     });
 
-    const winner = team1SetsWon > team2SetsWon ? match.team1Id : team2SetsWon > team1SetsWon ? match.team2Id : null;
+    let winner = null;
+    if (team1SetsWon > team2SetsWon) winner = match.team1Id;
+    else if (team2SetsWon > team1SetsWon) winner = match.team2Id;
 
-    const updatedMatches = tournament.matches.map(m =>
-      m.id === matchId
-        ? {
-            ...m,
-            sets,
-            status: isMatchComplete ? 'completed' : 'in-progress',
-            winner,
-            draftState: isMatchComplete ? null : {
-              currentSet,
-              sets,
-              history,
-              savedAt: new Date().toISOString(),
-            },
-          }
-        : m
-    );
+    const updatedTournament = updateMatchInTournament(tournament, matchId, m => ({
+      ...m,
+      sets,
+      status: isMatchComplete ? 'completed' : 'in-progress',
+      winner,
+      draftState: isMatchComplete ? null : {
+        currentSet,
+        sets,
+        history,
+        savedAt: new Date().toISOString(),
+      },
+    }));
 
-    saveSportTournament(sportConfig.storageKey, { ...tournament, matches: updatedMatches });
+    saveSportTournament(sportConfig.storageKey, updatedTournament);
     navigate(`/design1/${tournament.sportId}/tournament`);
   };
 
   // Cancel and discard changes
   const handleCancel = () => {
     if (hasChanges) {
-      const confirm = window.confirm('You have unsaved changes. Discard them?');
+      const confirm = globalThis.confirm('You have unsaved changes. Discard them?');
       if (!confirm) return;
     }
     navigate(`/design1/${tournament.sportId}/tournament`);
@@ -471,6 +472,14 @@ export default function MonoTennisLiveScore() {
     score2Display = pointToDisplay(currentSetData.points2);
   }
 
+  // Side swap derived display values
+  const leftScoreDisplay = sidesSwapped ? score2Display : score1Display;
+  const rightScoreDisplay = sidesSwapped ? score1Display : score2Display;
+  const leftGames = sidesSwapped ? currentSetData.games2 : currentSetData.games1;
+  const rightGames = sidesSwapped ? currentSetData.games1 : currentSetData.games2;
+  const leftTeam = sidesSwapped ? 2 : 1;
+  const rightTeam = sidesSwapped ? 1 : 2;
+
   return (
     <div className="max-w-2xl mx-auto px-6 py-10 mono-transition mono-visible">
       {/* Top bar */}
@@ -483,6 +492,22 @@ export default function MonoTennisLiveScore() {
           ← Back
         </button>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => { setSidesSwapped(s => !s); }}
+            className="mono-btn"
+            style={{
+              padding: '6px 12px',
+              fontSize: '0.75rem',
+              minWidth: 0,
+              touchAction: 'manipulation',
+              borderColor: sidesSwapped ? '#0066ff' : '#ddd',
+              color: sidesSwapped ? '#0066ff' : '#111',
+            }}
+            title="Swap sides"
+          >
+            Swap
+          </button>
           <span
             className={`mono-badge ${isTiebreakMode ? 'mono-badge-paused' : 'mono-badge-live'}`}
           >
@@ -496,24 +521,24 @@ export default function MonoTennisLiveScore() {
 
       {/* ARIA live region for score announcements */}
       <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
-        {team1Name}: {score1Display}. {team2Name}: {score2Display}.
+        {leftName}: {leftScoreDisplay}. {rightName}: {rightScoreDisplay}.
         {isTiebreakMode ? 'Tiebreak' : `Set ${currentSet + 1} of ${sets.length}`}.
       </div>
 
       {/* Score cards */}
       <div className="flex items-stretch gap-4 mb-8" style={{ minHeight: '250px' }}>
-        {/* Team 1 */}
+        {/* Left Team */}
         <div
           role="button"
           tabIndex={0}
-          onClick={() => !currentSetData.completed && addPoint(1)}
+          onClick={() => !currentSetData.completed && addPoint(leftTeam)}
           onKeyDown={(e) => {
             if ((e.key === 'Enter' || e.key === ' ') && !currentSetData.completed) {
               e.preventDefault();
-              addPoint(1);
+              addPoint(leftTeam);
             }
           }}
-          aria-label={`${team1Name}: ${score1Display}. Press Enter or click to add point`}
+          aria-label={`${leftName}: ${leftScoreDisplay}. Press Enter or click to add point`}
           aria-disabled={currentSetData.completed}
           className="flex-1 mono-card flex flex-col items-center justify-center gap-3 cursor-pointer transition-all"
           style={{
@@ -523,31 +548,31 @@ export default function MonoTennisLiveScore() {
           }}
         >
           <p className="text-sm uppercase tracking-widest font-normal" style={{ color: '#888' }}>
-            {team1Name}
+            {leftName}
           </p>
           <p
             className="text-7xl font-bold mono-score font-mono"
             style={{ color: '#111' }}
           >
-            {score1Display}
+            {leftScoreDisplay}
           </p>
           <p className="text-xs" style={{ color: '#888' }}>
-            Games: {currentSetData.games1}
+            Games: {leftGames}
           </p>
         </div>
 
-        {/* Team 2 */}
+        {/* Right Team */}
         <div
           role="button"
           tabIndex={0}
-          onClick={() => !currentSetData.completed && addPoint(2)}
+          onClick={() => !currentSetData.completed && addPoint(rightTeam)}
           onKeyDown={(e) => {
             if ((e.key === 'Enter' || e.key === ' ') && !currentSetData.completed) {
               e.preventDefault();
-              addPoint(2);
+              addPoint(rightTeam);
             }
           }}
-          aria-label={`${team2Name}: ${score2Display}. Press Enter or click to add point`}
+          aria-label={`${rightName}: ${rightScoreDisplay}. Press Enter or click to add point`}
           aria-disabled={currentSetData.completed}
           className="flex-1 mono-card flex flex-col items-center justify-center gap-3 cursor-pointer transition-all"
           style={{
@@ -557,16 +582,16 @@ export default function MonoTennisLiveScore() {
           }}
         >
           <p className="text-sm uppercase tracking-widest font-normal" style={{ color: '#888' }}>
-            {team2Name}
+            {rightName}
           </p>
           <p
             className="text-7xl font-bold mono-score font-mono"
             style={{ color: '#111' }}
           >
-            {score2Display}
+            {rightScoreDisplay}
           </p>
           <p className="text-xs" style={{ color: '#888' }}>
-            Games: {currentSetData.games2}
+            Games: {rightGames}
           </p>
         </div>
       </div>
@@ -574,7 +599,7 @@ export default function MonoTennisLiveScore() {
       {/* Keyboard shortcuts hint (desktop only) */}
       {!isTouchDevice && (
         <p className="text-xs text-center mb-6" style={{ color: '#ccc' }}>
-          Keyboard: Q = {team1Name} · P = {team2Name} · U = Undo
+          Keyboard: Q = {leftName} · P = {rightName} · U = Undo
         </p>
       )}
 
@@ -590,8 +615,6 @@ export default function MonoTennisLiveScore() {
 
             let scoreDisplay;
             if (set.isTiebreak && set.completed) {
-              const tbWinner = set.tiebreakPoints1 > set.tiebreakPoints2 ? set.games1 : set.games2;
-              const tbLoser = set.tiebreakPoints1 > set.tiebreakPoints2 ? set.games2 : set.games1;
               scoreDisplay = `${set.games1}-${set.games2} (${set.tiebreakPoints1}-${set.tiebreakPoints2})`;
             } else {
               scoreDisplay = `${set.games1}-${set.games2}`;
@@ -617,29 +640,27 @@ export default function MonoTennisLiveScore() {
       </div>
 
       {/* Bottom bar */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
+      <div>
+        <button onClick={saveMatch} className="mono-btn-primary w-full mb-3" style={{ padding: '12px', fontSize: '0.875rem' }}>
+          Save &amp; Return
+        </button>
+        <div className="flex gap-2">
           <button
             onClick={undo}
             disabled={history.length === 0}
-            className="mono-btn"
-            style={{ opacity: history.length === 0 ? 0.4 : 1, touchAction: 'manipulation' }}
+            className="mono-btn flex-1"
+            style={{ padding: '8px', fontSize: '0.8125rem', opacity: history.length === 0 ? 0.4 : 1, touchAction: 'manipulation' }}
           >
             Undo
           </button>
-        </div>
-        <div className="flex items-center gap-2">
-          <button onClick={handleCancel} className="mono-btn">
+          <button onClick={handleCancel} className="mono-btn flex-1" style={{ padding: '8px', fontSize: '0.8125rem' }}>
             Cancel
           </button>
           {hasChanges && !isMatchComplete && (
-            <button onClick={saveDraft} className="mono-btn" style={{ borderColor: '#0066ff', color: '#0066ff' }}>
+            <button onClick={saveDraft} className="mono-btn flex-1" style={{ padding: '8px', fontSize: '0.8125rem', borderColor: '#0066ff', color: '#0066ff' }}>
               Save Draft
             </button>
           )}
-          <button onClick={saveMatch} className="mono-btn-primary">
-            Save & Return
-          </button>
         </div>
       </div>
     </div>

@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getSportById } from '../../../models/sportRegistry';
 import { loadSportTournaments, saveSportTournament } from '../../../utils/storage';
+import { updateMatchInTournament } from '../../../utils/knockoutManager';
 
-const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+const isTouchDevice = 'ontouchstart' in globalThis || navigator.maxTouchPoints > 0;
 
 // Haptic feedback helper
 const triggerHaptic = (pattern) => {
@@ -14,7 +15,7 @@ const triggerHaptic = (pattern) => {
 
 // Confetti helper
 const triggerConfetti = () => {
-  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const prefersReducedMotion = globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (prefersReducedMotion) return;
 
   const overlay = document.createElement('div');
@@ -35,7 +36,7 @@ const triggerConfetti = () => {
   }
 
   setTimeout(() => {
-    document.body.removeChild(overlay);
+    overlay.remove();
   }, 3500);
 };
 
@@ -53,6 +54,7 @@ export default function MonoSetsLiveScore() {
   const [sets, setSets] = useState([{ score1: 0, score2: 0, completed: false }]);
   const [history, setHistory] = useState([]);
   const [hasChanges, setHasChanges] = useState(false);
+  const [sidesSwapped, setSidesSwapped] = useState(false);
 
   // Animation state
   const [showSetWon, setShowSetWon] = useState(false);
@@ -60,6 +62,7 @@ export default function MonoSetsLiveScore() {
 
   // Debounce ref for rapid clicks
   const lastClickRef = useRef(0);
+  const isKnockoutRef = useRef(false);
 
   // Load tournament and match
   useEffect(() => {
@@ -70,7 +73,11 @@ export default function MonoSetsLiveScore() {
     const found = tournaments.find(t => t.id === Number(id));
     if (!found) return;
 
-    const foundMatch = found.matches.find(m => m.id === matchId);
+    let foundMatch = found.matches.find(m => m.id === matchId);
+    if (!foundMatch) {
+      foundMatch = (found.knockoutMatches || []).find(m => m.id === matchId);
+      if (foundMatch) isKnockoutRef.current = true;
+    }
     if (!foundMatch) return;
 
     setSportConfig(config);
@@ -92,6 +99,11 @@ export default function MonoSetsLiveScore() {
     }
   }, [sport, id, matchId]);
 
+  // Effective format: use knockout format for knockout matches
+  const effectiveFormat = isKnockoutRef.current && tournament?.knockoutConfig?.format
+    ? tournament.knockoutConfig.format
+    : tournament?.format;
+
   // Check if current set is complete
   const checkSetComplete = (set) => {
     if (!sportConfig) return false;
@@ -101,11 +113,11 @@ export default function MonoSetsLiveScore() {
     const min = Math.min(set.score1, set.score2);
 
     // Default to best-of if type not specified (backwards compatibility)
-    const formatType = tournament.format.type || 'best-of';
+    const formatType = effectiveFormat.type || 'best-of';
 
     // Single-set format
     if (formatType === 'single') {
-      const target = tournament.format.points;
+      const target = effectiveFormat.points;
       if (max < target) return false;
       if (max - min < winBy) return false;
       if (maxPoints && max >= maxPoints && max > min) return true;
@@ -114,8 +126,8 @@ export default function MonoSetsLiveScore() {
 
     // Best-of format
     const { pointsPerSet, deciderPoints } = sportConfig.config;
-    const isDecider = currentSet === (tournament.format.sets - 1);
-    const target = isDecider && deciderPoints ? deciderPoints : (tournament.format.points || pointsPerSet);
+    const isDecider = effectiveFormat.sets > 1 && currentSet === (effectiveFormat.sets - 1);
+    const target = isDecider && deciderPoints ? deciderPoints : (effectiveFormat.points || pointsPerSet);
 
     // Must reach target
     if (max < target) return false;
@@ -147,7 +159,7 @@ export default function MonoSetsLiveScore() {
     // Save to history BEFORE modifying
     setHistory(prev => [...prev, {
       timestamp: Date.now(),
-      sets: JSON.parse(JSON.stringify(sets)),
+      sets: structuredClone(sets),
       currentSet,
     }].slice(-100)); // Keep last 100
 
@@ -167,15 +179,14 @@ export default function MonoSetsLiveScore() {
         triggerHaptic([50, 100, 50]);
 
         // Show set won notification
-        const winningTeam = newSets[currentSet].score1 > newSets[currentSet].score2
-          ? (match.team1Id === tournament.teams[0]?.id ? tournament.teams[0]?.name : tournament.teams.find(t => t.id === match.team1Id)?.name)
-          : (match.team2Id === tournament.teams[0]?.id ? tournament.teams[0]?.name : tournament.teams.find(t => t.id === match.team2Id)?.name);
+        const winnerId = newSets[currentSet].score1 > newSets[currentSet].score2 ? match.team1Id : match.team2Id;
+        const winningTeam = tournament.teams.find(t => t.id === winnerId)?.name;
 
         setSetWonTeam(winningTeam || `Team ${team}`);
         setShowSetWon(true);
         setTimeout(() => setShowSetWon(false), 1500);
 
-        const formatType = tournament.format.type || 'best-of';
+        const formatType = effectiveFormat.type || 'best-of';
 
         // Single-set format: match ends after first set
         if (formatType === 'single') {
@@ -187,7 +198,7 @@ export default function MonoSetsLiveScore() {
         // Best-of format: check if match complete
         const t1SetsWon = newSets.filter(s => s.completed && s.score1 > s.score2).length;
         const t2SetsWon = newSets.filter(s => s.completed && s.score2 > s.score1).length;
-        const setsToWin = Math.ceil(tournament.format.sets / 2);
+        const setsToWin = Math.ceil(effectiveFormat.sets / 2);
 
         if (t1SetsWon >= setsToWin || t2SetsWon >= setsToWin) {
           // Match complete - trigger confetti
@@ -197,7 +208,7 @@ export default function MonoSetsLiveScore() {
         }
 
         // Start next set
-        if (currentSet < tournament.format.sets - 1) {
+        if (currentSet < effectiveFormat.sets - 1) {
           newSets.push({ score1: 0, score2: 0, completed: false });
           setCurrentSet(prev => prev + 1);
         }
@@ -219,25 +230,18 @@ export default function MonoSetsLiveScore() {
 
   // Save draft (in-progress match)
   const saveDraft = () => {
-    const updatedMatches = tournament.matches.map(m =>
-      m.id === matchId
-        ? {
-            ...m,
-            status: 'in-progress',
-            draftState: {
-              currentSet,
-              sets: JSON.parse(JSON.stringify(sets)),
-              history: JSON.parse(JSON.stringify(history.slice(-50))), // Keep last 50 for storage efficiency
-              savedAt: new Date().toISOString(),
-            },
-          }
-        : m
-    );
+    const updatedTournament = updateMatchInTournament(tournament, matchId, m => ({
+      ...m,
+      status: 'in-progress',
+      draftState: {
+        currentSet,
+        sets: structuredClone(sets),
+        history: structuredClone(history.slice(-50)),
+        savedAt: new Date().toISOString(),
+      },
+    }));
 
-    saveSportTournament(sportConfig.storageKey, {
-      ...tournament,
-      matches: updatedMatches,
-    });
+    saveSportTournament(sportConfig.storageKey, updatedTournament);
 
     setHasChanges(false);
     alert('Draft saved! You can resume this match later.');
@@ -256,37 +260,30 @@ export default function MonoSetsLiveScore() {
     const t1SetsWon = completedSets.filter(s => s.score1 > s.score2).length;
     const t2SetsWon = completedSets.filter(s => s.score2 > s.score1).length;
 
-    const formatType = tournament.format.type || 'best-of';
+    const formatType = effectiveFormat.type || 'best-of';
     let isMatchComplete;
     if (formatType === 'single') {
       // Single-set format: match is complete when the one set is done
       isMatchComplete = completedSets.length > 0;
     } else {
-      const setsToWin = Math.ceil(tournament.format.sets / 2);
+      const setsToWin = Math.ceil(effectiveFormat.sets / 2);
       isMatchComplete = t1SetsWon >= setsToWin || t2SetsWon >= setsToWin;
     }
 
-    const updatedMatches = tournament.matches.map(m =>
-      m.id === matchId
-        ? {
-            ...m,
-            sets: setsToSave,
-            status: isMatchComplete ? 'completed' : 'in-progress',
-            winner: isMatchComplete ? (t1SetsWon > t2SetsWon ? m.team1Id : m.team2Id) : null,
-            draftState: isMatchComplete ? undefined : {
-              currentSet,
-              sets: JSON.parse(JSON.stringify(sets)),
-              history: JSON.parse(JSON.stringify(history.slice(-50))),
-              savedAt: new Date().toISOString(),
-            },
-          }
-        : m
-    );
+    const updatedTournament = updateMatchInTournament(tournament, matchId, m => ({
+      ...m,
+      sets: setsToSave,
+      status: isMatchComplete ? 'completed' : 'in-progress',
+      winner: isMatchComplete ? (t1SetsWon > t2SetsWon ? m.team1Id : m.team2Id) : null,
+      draftState: isMatchComplete ? undefined : {
+        currentSet,
+        sets: structuredClone(sets),
+        history: structuredClone(history.slice(-50)),
+        savedAt: new Date().toISOString(),
+      },
+    }));
 
-    saveSportTournament(sportConfig.storageKey, {
-      ...tournament,
-      matches: updatedMatches,
-    });
+    saveSportTournament(sportConfig.storageKey, updatedTournament);
 
     navigate(`/${sport}/tournament/${id}`);
   };
@@ -301,10 +298,10 @@ export default function MonoSetsLiveScore() {
 
       switch (e.key.toLowerCase()) {
         case 'q':
-          addPoint(1);
+          addPoint(leftTeam);
           break;
         case 'p':
-          addPoint(2);
+          addPoint(rightTeam);
           break;
         case 'u':
           undo();
@@ -314,13 +311,13 @@ export default function MonoSetsLiveScore() {
       }
     };
 
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [currentSet, sets, history, sportConfig, tournament]); // Dependencies for addPoint/undo
+    globalThis.addEventListener('keydown', handleKeyPress);
+    return () => globalThis.removeEventListener('keydown', handleKeyPress);
+  }, [currentSet, sets, history, sportConfig, tournament, sidesSwapped]); // Dependencies for addPoint/undo
 
   // Cancel and return
   const handleCancel = () => {
-    if (hasChanges && !window.confirm('Discard unsaved changes?')) return;
+    if (hasChanges && !globalThis.confirm('Discard unsaved changes?')) return;
     navigate(`/${sport}/tournament/${id}`);
   };
 
@@ -337,12 +334,25 @@ export default function MonoSetsLiveScore() {
   const team1Name = getTeamName(match.team1Id);
   const team2Name = getTeamName(match.team2Id);
 
+  // Side swap helpers
+  const leftTeam = sidesSwapped ? 2 : 1;
+  const rightTeam = sidesSwapped ? 1 : 2;
+  const leftName = sidesSwapped ? team2Name : team1Name;
+  const rightName = sidesSwapped ? team1Name : team2Name;
+  const leftScore = sidesSwapped ? (sets[currentSet]?.score2 || 0) : (sets[currentSet]?.score1 || 0);
+  const rightScore = sidesSwapped ? (sets[currentSet]?.score1 || 0) : (sets[currentSet]?.score2 || 0);
+
   const { pointsPerSet, deciderPoints, winBy } = sportConfig.config;
-  const formatType = tournament.format.type || 'best-of';
-  const isDeciderSet = currentSet === (tournament.format.sets - 1);
-  const targetPoints = formatType === 'single'
-    ? tournament.format.points
-    : (isDeciderSet && deciderPoints ? deciderPoints : (tournament.format.points || pointsPerSet));
+  const formatType = effectiveFormat.type || 'best-of';
+  const isDeciderSet = effectiveFormat.sets > 1 && currentSet === (effectiveFormat.sets - 1);
+  let targetPoints;
+  if (formatType === 'single') {
+    targetPoints = effectiveFormat.points;
+  } else if (isDeciderSet && deciderPoints) {
+    targetPoints = deciderPoints;
+  } else {
+    targetPoints = effectiveFormat.points || pointsPerSet;
+  }
   const isCurrentSetComplete = sets[currentSet]?.completed || false;
 
   return (
@@ -357,9 +367,27 @@ export default function MonoSetsLiveScore() {
           >
             ← Back
           </button>
-          <span className={`mono-badge ${isCurrentSetComplete ? 'mono-badge-final' : 'mono-badge-live'}`}>
-            {formatType === 'single' ? 'Single Set' : `Set ${currentSet + 1} of ${tournament.format.sets}`}
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => { setSidesSwapped(prev => !prev); }}
+              className="mono-btn"
+              style={{
+                padding: '6px 12px',
+                fontSize: '0.75rem',
+                minWidth: 0,
+                touchAction: 'manipulation',
+                borderColor: sidesSwapped ? '#0066ff' : '#ddd',
+                color: sidesSwapped ? '#0066ff' : '#111',
+              }}
+              title="Swap sides"
+            >
+              Swap
+            </button>
+            <span className={`mono-badge ${isCurrentSetComplete ? 'mono-badge-final' : 'mono-badge-live'}`}>
+              {formatType === 'single' ? 'Single Set' : `Set ${currentSet + 1} of ${effectiveFormat.sets}`}
+            </span>
+          </div>
         </div>
 
         {/* ARIA live region for score announcements */}
@@ -369,24 +397,24 @@ export default function MonoSetsLiveScore() {
           aria-atomic="true"
           className="sr-only"
         >
-          {team1Name}: {sets[currentSet]?.score1 || 0}. {team2Name}: {sets[currentSet]?.score2 || 0}. Set {currentSet + 1} of {tournament?.format?.sets || 0}.
+          {team1Name}: {sets[currentSet]?.score1 || 0}. {team2Name}: {sets[currentSet]?.score2 || 0}. Set {currentSet + 1} of {effectiveFormat?.sets || 0}.
         </div>
 
         {/* Score cards - side by side */}
         <div className="flex items-stretch gap-4 mb-8" style={{ minHeight: '250px' }}>
-          {/* Team 1 Card */}
+          {/* Left team */}
           <div
             role="button"
             tabIndex={isCurrentSetComplete ? -1 : 0}
             className="flex-1 flex flex-col items-center justify-center mono-card"
-            onClick={() => !isCurrentSetComplete && addPoint(1)}
+            onClick={() => !isCurrentSetComplete && addPoint(leftTeam)}
             onKeyDown={(e) => {
               if (!isCurrentSetComplete && (e.key === 'Enter' || e.key === ' ')) {
                 e.preventDefault();
-                addPoint(1);
+                addPoint(leftTeam);
               }
             }}
-            aria-label={`${team1Name}: ${sets[currentSet]?.score1 || 0} points. ${isCurrentSetComplete ? 'Set complete' : 'Press Enter or click to add point'}`}
+            aria-label={`${leftName}: ${leftScore} points. ${isCurrentSetComplete ? 'Set complete' : 'Press Enter or click to add point'}`}
             aria-disabled={isCurrentSetComplete}
             style={{
               padding: '24px 16px',
@@ -396,29 +424,29 @@ export default function MonoSetsLiveScore() {
             }}
           >
             <p className="text-xs uppercase tracking-widest mb-4" style={{ color: '#888' }} aria-hidden="true">
-              {team1Name}
+              {leftName}
             </p>
             <p className="text-6xl font-bold font-mono mono-score" style={{ color: '#111' }} aria-hidden="true">
-              {sets[currentSet]?.score1 || 0}
+              {leftScore}
             </p>
             <p className="text-xs mt-4" style={{ color: '#bbb' }} aria-hidden="true">
               {isCurrentSetComplete ? 'Set complete' : 'Tap to score'}
             </p>
           </div>
 
-          {/* Team 2 Card */}
+          {/* Right team */}
           <div
             role="button"
             tabIndex={isCurrentSetComplete ? -1 : 0}
             className="flex-1 flex flex-col items-center justify-center mono-card"
-            onClick={() => !isCurrentSetComplete && addPoint(2)}
+            onClick={() => !isCurrentSetComplete && addPoint(rightTeam)}
             onKeyDown={(e) => {
               if (!isCurrentSetComplete && (e.key === 'Enter' || e.key === ' ')) {
                 e.preventDefault();
-                addPoint(2);
+                addPoint(rightTeam);
               }
             }}
-            aria-label={`${team2Name}: ${sets[currentSet]?.score2 || 0} points. ${isCurrentSetComplete ? 'Set complete' : 'Press Enter or click to add point'}`}
+            aria-label={`${rightName}: ${rightScore} points. ${isCurrentSetComplete ? 'Set complete' : 'Press Enter or click to add point'}`}
             aria-disabled={isCurrentSetComplete}
             style={{
               padding: '24px 16px',
@@ -428,10 +456,10 @@ export default function MonoSetsLiveScore() {
             }}
           >
             <p className="text-xs uppercase tracking-widest mb-4" style={{ color: '#888' }} aria-hidden="true">
-              {team2Name}
+              {rightName}
             </p>
             <p className="text-6xl font-bold font-mono mono-score" style={{ color: '#111' }} aria-hidden="true">
-              {sets[currentSet]?.score2 || 0}
+              {rightScore}
             </p>
             <p className="text-xs mt-4" style={{ color: '#bbb' }} aria-hidden="true">
               {isCurrentSetComplete ? 'Set complete' : 'Tap to score'}
@@ -445,12 +473,12 @@ export default function MonoSetsLiveScore() {
         </p>
         {!isTouchDevice && (
           <p className="text-xs text-center mb-6" style={{ color: '#ccc' }}>
-            Keyboard: Q = {team1Name} &middot; P = {team2Name} &middot; U = Undo
+            Keyboard: Q = {leftName} &middot; P = {rightName} &middot; U = Undo
           </p>
         )}
 
         {/* Set history */}
-        {sets.filter(s => s.completed).length > 0 && (
+        {sets.some(s => s.completed) && (
           <div className="py-4 text-center text-sm mb-6" style={{ color: '#888', borderTop: '1px solid #eee' }}>
             <div className="flex justify-center gap-3 flex-wrap">
               {sets.filter(s => s.completed).map((s, i) => (
@@ -463,28 +491,27 @@ export default function MonoSetsLiveScore() {
         )}
 
         {/* Bottom bar */}
-        <div className="flex justify-between items-center pt-4" style={{ borderTop: '1px solid #eee' }}>
-          <button
-            onClick={undo}
-            disabled={history.length === 0}
-            className="mono-btn"
-            style={{ opacity: history.length === 0 ? 0.4 : 1, touchAction: 'manipulation' }}
-          >
-            Undo
+        <div className="pt-4" style={{ borderTop: '1px solid #eee' }}>
+          <button onClick={saveMatch} className="mono-btn-primary w-full mb-3" style={{ padding: '12px', fontSize: '0.875rem' }}>
+            Save &amp; Return
           </button>
-
-          <div className="flex gap-3">
-            <button onClick={handleCancel} className="mono-btn">
+          <div className="flex gap-2">
+            <button
+              onClick={undo}
+              disabled={history.length === 0}
+              className="mono-btn flex-1"
+              style={{ padding: '8px', fontSize: '0.8125rem', opacity: history.length === 0 ? 0.4 : 1, touchAction: 'manipulation' }}
+            >
+              Undo
+            </button>
+            <button onClick={handleCancel} className="mono-btn flex-1" style={{ padding: '8px', fontSize: '0.8125rem' }}>
               Cancel
             </button>
             {hasChanges && (
-              <button onClick={saveDraft} className="mono-btn" style={{ borderColor: '#0066ff', color: '#0066ff' }}>
+              <button onClick={saveDraft} className="mono-btn flex-1" style={{ padding: '8px', fontSize: '0.8125rem', borderColor: '#0066ff', color: '#0066ff' }}>
                 Save Draft
               </button>
             )}
-            <button onClick={saveMatch} className="mono-btn-primary">
-              Save & Return
-            </button>
           </div>
         </div>
       </div>

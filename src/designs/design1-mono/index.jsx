@@ -17,6 +17,7 @@ const MonoCricketTournament = lazy(() => import('./MonoCricketTournament'));
 const GenericSetsTournament = lazy(() => import('./GenericSetsTournament'));
 const GenericGoalsTournament = lazy(() => import('./GenericGoalsTournament'));
 const MonoStatistics = lazy(() => import('./MonoStatistics'));
+const MonoCricketTestLiveScore = lazy(() => import('./scoring/MonoCricketTestLiveScore'));
 
 // Lazy-loaded showcase components (rarely visited)
 const MonoMatchCardShowcase = lazy(() => import('./MonoMatchCardShowcase'));
@@ -115,6 +116,7 @@ export default function Design1Mono() {
             <Route path=":sport/tournament/:id" element={<TournamentDispatcher />} />
             <Route path=":sport/tournament/:id/match/:matchId/score" element={<MonoTournamentLiveScore />} />
             <Route path=":sport/quick" element={<MonoQuickMatch />} />
+            <Route path=":sport/quick/test/:matchId" element={<MonoCricketTestLiveScore storageMode="quick" />} />
 
             {/* Statistics */}
             <Route path="statistics" element={<MonoStatistics />} />

@@ -437,10 +437,11 @@ export const SPORT_REGISTRY = {
     },
     standingsColumns: ['P', 'W', 'L', 'NR', 'NRR', 'Pts'],
     features: [
-      'Custom overs (1-50)',
+      'T20, T10, ODI, Test, Gully formats',
+      'Powerplay & free-hit indicators',
+      'Ball-by-ball scoring',
       'NRR points table',
-      'Ball-by-ball quick match',
-      'Wickets, extras, all-out',
+      'Declaration & follow-on (Test)',
     ],
   },
 };
@@ -471,5 +472,5 @@ export const getSportsByCategory = () => ({
   ],
   'Contact Sports': [SPORT_REGISTRY.kabaddi, SPORT_REGISTRY.rugby],
   'Net Sports': [SPORT_REGISTRY.volleyball],
-  'Bat and Ball': [SPORT_REGISTRY.cricket],
+  'Cricket': [SPORT_REGISTRY.cricket],
 });

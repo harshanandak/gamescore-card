@@ -1,20 +1,34 @@
 import React from 'react';
 import { useParams } from 'react-router-dom';
 import { getSportById } from '../../models/sportRegistry';
+import { loadSportTournaments } from '../../utils/storage';
+import { migrateCricketFormat } from '../../utils/formatMigration';
 import MonoSetsLiveScore from './scoring/MonoSetsLiveScore';
 import MonoGoalsLiveScore from './scoring/MonoGoalsLiveScore';
 import MonoCricketLiveScore from './scoring/MonoCricketLiveScore';
+import MonoCricketTestLiveScore from './scoring/MonoCricketTestLiveScore';
 import MonoTennisLiveScore from './scoring/MonoTennisLiveScore';
 
 export default function MonoTournamentLiveScore() {
-  const { sport } = useParams();
+  const { sport, id, matchId } = useParams();
 
-  // Cricket uses custom-cricket engine and special handling
-  if (sport === 'cricket') {
+  // Cricket: check match-level format to pick scorer (bug fix 9f)
+  if (sport === 'cricket' || getSportById(sport)?.engine === 'custom-cricket') {
+    const sportConfig = getSportById(sport);
+    const storageKey = sportConfig?.storageKey || 'gamescore_cricket';
+    const tournaments = loadSportTournaments(storageKey);
+    const tournament = tournaments.find(t => t.id === Number(id) || t.id === id);
+    const match = tournament?.matches?.find(m => m.id === matchId || m.id === Number(matchId))
+      || (tournament?.knockoutMatches || []).find(m => m.id === matchId || m.id === Number(matchId));
+    const format = migrateCricketFormat(match?.format || tournament?.knockoutConfig?.format || tournament?.format);
+
+    if (format?.totalInnings === 4) {
+      return <MonoCricketTestLiveScore />;
+    }
     return <MonoCricketLiveScore />;
   }
 
-  // Tennis uses real tennis scoring (0-15-30-40-Game, deuce, tiebreak)
+  // Tennis uses real tennis scoring
   if (sport === 'tennis') {
     return <MonoTennisLiveScore />;
   }
@@ -29,17 +43,14 @@ export default function MonoTournamentLiveScore() {
     );
   }
 
-  // Sets-based sports use MonoSetsLiveScore
   if (sportConfig.engine === 'sets') {
     return <MonoSetsLiveScore />;
   }
 
-  // Goals-based sports use MonoGoalsLiveScore
   if (sportConfig.engine === 'goals') {
     return <MonoGoalsLiveScore />;
   }
 
-  // Fallback
   return (
     <div className="min-h-screen px-6 py-10 flex items-center justify-center">
       <p style={{ color: '#888' }}>Live scoring for {sportConfig?.name || sport} coming soon...</p>

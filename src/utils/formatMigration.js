@@ -13,9 +13,9 @@ export function migrateTournamentFormat(tournament) {
 
   const format = tournament.format;
 
-  // If formatMode already exists, no migration needed
+  // If formatMode already exists, only need knockout field migration
   if (format.formatMode) {
-    return tournament;
+    return migrateKnockoutFields(tournament);
   }
 
   // Migrate existing tournaments to Custom mode (preserves user's original choices)
@@ -51,10 +51,40 @@ export function migrateTournamentFormat(tournament) {
     }
   }
 
-  return {
+  return migrateKnockoutFields({
     ...tournament,
     format: migratedFormat,
-  };
+  });
+}
+
+/**
+ * Add knockout-related fields to tournaments that don't have them.
+ * Ensures backward compatibility with pre-knockout tournaments.
+ */
+export function migrateKnockoutFields(tournament) {
+  if (!tournament) return tournament;
+
+  let migrated = tournament;
+  let changed = false;
+
+  if (migrated.winnerMode === undefined) {
+    migrated = { ...migrated, winnerMode: 'table-topper' };
+    changed = true;
+  }
+  if (migrated.phase === undefined) {
+    migrated = { ...migrated, phase: 'group' };
+    changed = true;
+  }
+  if (migrated.knockoutMatches === undefined) {
+    migrated = { ...migrated, knockoutMatches: [] };
+    changed = true;
+  }
+  if (migrated.knockoutConfig === undefined) {
+    migrated = { ...migrated, knockoutConfig: null };
+    changed = true;
+  }
+
+  return changed ? migrated : tournament;
 }
 
 /**
@@ -124,4 +154,39 @@ export function migrateQuickMatches(matches) {
   }
 
   return matches.map(match => migrateQuickMatchFormat(match));
+}
+
+/**
+ * Migrate cricket format to new multi-format schema
+ * Old formats: { overs: 5, players: 6, solo: true } (no preset)
+ * New formats: { preset: 'T20', overs: 20, players: 11, ... }
+ * @param {object} format - Cricket format object
+ * @returns {object} Migrated format with all required fields
+ */
+export function migrateCricketFormat(format) {
+  if (!format) {
+    return {
+      preset: 'custom', overs: 5, players: 6, solo: true,
+      totalInnings: 2, trackOvers: true, freeHit: false,
+      powerplay: [], lastManStands: false, trialBall: false,
+      oneTipOneHand: false, declaration: false, followOn: false,
+    };
+  }
+
+  // Already migrated
+  if (format.preset) return format;
+
+  return {
+    ...format,
+    preset: 'custom',
+    trackOvers: format.trackOvers !== undefined ? format.trackOvers : true,
+    totalInnings: format.totalInnings || 2,
+    freeHit: format.freeHit || false,
+    powerplay: format.powerplay || [],
+    lastManStands: format.lastManStands || false,
+    trialBall: format.trialBall || false,
+    oneTipOneHand: format.oneTipOneHand || false,
+    declaration: format.declaration || false,
+    followOn: format.followOn || false,
+  };
 }

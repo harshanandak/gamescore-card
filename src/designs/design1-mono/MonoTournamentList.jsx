@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { loadSportTournaments, deleteSportTournament } from '../../utils/storage';
 import { getSportById } from '../../models/sportRegistry';
+import { getCricketFormat } from '../../utils/cricketCalculations';
+import { migrateCricketFormat } from '../../utils/formatMigration';
 
 export default function MonoTournamentList() {
   const navigate = useNavigate();
@@ -104,8 +106,20 @@ export default function MonoTournamentList() {
                       {t.teams?.length || 0} teams &middot;{' '}
                       {t.teams?.length === 2 && `${matchCount}-match series`}
                       {t.teams?.length >= 3 && `${matchCount} matches \u00b7 Round-robin`}
-                      {t.format?.overs ? ` \u00b7 ${t.format.overs} overs` : ''}
-                      {t.format?.sets ? ` \u00b7 Best of ${t.format.sets}` : ''}
+                      {(() => {
+                        // Cricket: show format preset name instead of raw overs
+                        if (sportConfig.engine === 'custom-cricket' && t.format) {
+                          const migrated = migrateCricketFormat(t.format);
+                          const preset = getCricketFormat(migrated.preset);
+                          if (preset) return ` \u00b7 ${preset.name}`;
+                          if (migrated.overs) return ` \u00b7 ${migrated.overs} overs`;
+                          return ' \u00b7 Custom';
+                        }
+                        // Non-cricket: existing logic
+                        if (t.format?.overs) return ` \u00b7 ${t.format.overs} overs`;
+                        if (t.format?.sets) return ` \u00b7 Best of ${t.format.sets}`;
+                        return '';
+                      })()}
                     </p>
                   </button>
                   <div style={{ borderTop: '1px solid #eee', padding: '8px 20px' }}>
