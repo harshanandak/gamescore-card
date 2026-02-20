@@ -3,8 +3,6 @@ import { migrateTournaments } from './formatMigration';
 
 const STORAGE_KEYS = {
   TOURNAMENTS: 'gamescore_tournaments',
-  CRICKET_DATA: 'gamescore_cricket',
-  VOLLEYBALL_DATA: 'gamescore_volleyball',
   STATISTICS: 'gamescore_statistics',
   QUICK_MATCHES: 'gamescore_quickmatches',
 };
@@ -134,76 +132,6 @@ export const clearData = (key) => {
     console.error('Error clearing data:', error);
     return false;
   }
-};
-
-// Cricket-specific storage
-export const saveCricketTournament = (tournamentData) => {
-  const tournaments = loadData(STORAGE_KEYS.CRICKET_DATA, []);
-  const existingIndex = tournaments.findIndex(t => t.id === tournamentData.id);
-
-  if (existingIndex >= 0) {
-    tournaments[existingIndex] = tournamentData;
-  } else {
-    tournaments.push(tournamentData);
-  }
-
-  return saveData(STORAGE_KEYS.CRICKET_DATA, tournaments);
-};
-
-export const loadCricketTournaments = () => {
-  const tournaments = loadData(STORAGE_KEYS.CRICKET_DATA, []);
-  const migratedTournaments = migrateTournaments(tournaments);
-
-  // Save migrated data if needed
-  const needsSave = migratedTournaments.some((t, i) =>
-    t.format?.formatMode && !tournaments[i]?.format?.formatMode
-  );
-  if (needsSave) {
-    saveData(STORAGE_KEYS.CRICKET_DATA, migratedTournaments);
-  }
-
-  return migratedTournaments;
-};
-
-export const deleteCricketTournament = (tournamentId) => {
-  const tournaments = loadData(STORAGE_KEYS.CRICKET_DATA, []);
-  const filtered = tournaments.filter(t => t.id !== tournamentId);
-  return saveData(STORAGE_KEYS.CRICKET_DATA, filtered);
-};
-
-// Volleyball-specific storage
-export const saveVolleyballTournament = (tournamentData) => {
-  const tournaments = loadData(STORAGE_KEYS.VOLLEYBALL_DATA, []);
-  const existingIndex = tournaments.findIndex(t => t.id === tournamentData.id);
-
-  if (existingIndex >= 0) {
-    tournaments[existingIndex] = tournamentData;
-  } else {
-    tournaments.push(tournamentData);
-  }
-
-  return saveData(STORAGE_KEYS.VOLLEYBALL_DATA, tournaments);
-};
-
-export const loadVolleyballTournaments = () => {
-  const tournaments = loadData(STORAGE_KEYS.VOLLEYBALL_DATA, []);
-  const migratedTournaments = migrateTournaments(tournaments);
-
-  // Save migrated data if needed
-  const needsSave = migratedTournaments.some((t, i) =>
-    t.format?.formatMode && !tournaments[i]?.format?.formatMode
-  );
-  if (needsSave) {
-    saveData(STORAGE_KEYS.VOLLEYBALL_DATA, migratedTournaments);
-  }
-
-  return migratedTournaments;
-};
-
-export const deleteVolleyballTournament = (tournamentId) => {
-  const tournaments = loadData(STORAGE_KEYS.VOLLEYBALL_DATA, []);
-  const filtered = tournaments.filter(t => t.id !== tournamentId);
-  return saveData(STORAGE_KEYS.VOLLEYBALL_DATA, filtered);
 };
 
 // Statistics storage

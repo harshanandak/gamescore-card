@@ -8,15 +8,9 @@ import {
   isStorageAvailable,
   isPrivateMode,
   STORAGE_KEYS,
-  saveCricketTournament,
-  loadCricketTournaments,
-  deleteCricketTournament,
   saveSportTournament,
   loadSportTournaments,
   deleteSportTournament,
-  saveVolleyballTournament,
-  loadVolleyballTournaments,
-  deleteVolleyballTournament,
   saveStatistics,
   loadAllStatistics,
 } from './storage';
@@ -202,90 +196,7 @@ describe('isPrivateMode', () => {
 describe('STORAGE_KEYS', () => {
   it('has all expected keys', () => {
     expect(STORAGE_KEYS.TOURNAMENTS).toBe('gamescore_tournaments');
-    expect(STORAGE_KEYS.CRICKET_DATA).toBe('gamescore_cricket');
-    expect(STORAGE_KEYS.VOLLEYBALL_DATA).toBe('gamescore_volleyball');
     expect(STORAGE_KEYS.STATISTICS).toBe('gamescore_statistics');
-  });
-});
-
-// ─── Cricket-specific storage ──────────────────────────────────────────────────
-
-describe('Cricket storage', () => {
-  const tournament1 = { id: 'c1', name: 'IPL', teams: ['A', 'B'] };
-  const tournament2 = { id: 'c2', name: 'BBL', teams: ['C', 'D'] };
-
-  it('loadCricketTournaments returns empty array by default', () => {
-    expect(loadCricketTournaments()).toEqual([]);
-  });
-
-  it('saveCricketTournament adds a tournament', () => {
-    saveCricketTournament(tournament1);
-    const loaded = loadCricketTournaments();
-    expect(loaded).toHaveLength(1);
-    expect(loaded[0]).toEqual(tournament1);
-  });
-
-  it('saveCricketTournament adds multiple tournaments', () => {
-    saveCricketTournament(tournament1);
-    saveCricketTournament(tournament2);
-    expect(loadCricketTournaments()).toHaveLength(2);
-  });
-
-  it('saveCricketTournament updates existing tournament by id', () => {
-    saveCricketTournament(tournament1);
-    const updated = { ...tournament1, name: 'IPL 2024' };
-    saveCricketTournament(updated);
-    const loaded = loadCricketTournaments();
-    expect(loaded).toHaveLength(1);
-    expect(loaded[0].name).toBe('IPL 2024');
-  });
-
-  it('deleteCricketTournament removes the correct tournament', () => {
-    saveCricketTournament(tournament1);
-    saveCricketTournament(tournament2);
-    deleteCricketTournament('c1');
-    const loaded = loadCricketTournaments();
-    expect(loaded).toHaveLength(1);
-    expect(loaded[0].id).toBe('c2');
-  });
-
-  it('deleteCricketTournament is no-op if id not found', () => {
-    saveCricketTournament(tournament1);
-    deleteCricketTournament('nonexistent');
-    expect(loadCricketTournaments()).toHaveLength(1);
-  });
-});
-
-// ─── Volleyball-specific storage ───────────────────────────────────────────────
-
-describe('Volleyball storage', () => {
-  const t1 = { id: 'v1', name: 'League A' };
-  const t2 = { id: 'v2', name: 'League B' };
-
-  it('loadVolleyballTournaments returns empty array by default', () => {
-    expect(loadVolleyballTournaments()).toEqual([]);
-  });
-
-  it('saves and loads volleyball tournaments', () => {
-    saveVolleyballTournament(t1);
-    saveVolleyballTournament(t2);
-    expect(loadVolleyballTournaments()).toHaveLength(2);
-  });
-
-  it('updates existing volleyball tournament', () => {
-    saveVolleyballTournament(t1);
-    saveVolleyballTournament({ ...t1, name: 'Updated' });
-    const loaded = loadVolleyballTournaments();
-    expect(loaded).toHaveLength(1);
-    expect(loaded[0].name).toBe('Updated');
-  });
-
-  it('deletes volleyball tournament', () => {
-    saveVolleyballTournament(t1);
-    saveVolleyballTournament(t2);
-    deleteVolleyballTournament('v1');
-    expect(loadVolleyballTournaments()).toHaveLength(1);
-    expect(loadVolleyballTournaments()[0].id).toBe('v2');
   });
 });
 
